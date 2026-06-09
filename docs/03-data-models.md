@@ -5,6 +5,12 @@ Cross-service references store only the **foreign UUID** (e.g. `user_id`) —
 never a FK to another DB. Denormalized copies (e.g. contact name) are kept
 in sync via events.
 
+> **Scaffold note.** These are the production schemas (Prisma + Postgres). The
+> scaffold currently holds the same shapes in **in-memory stores** (e.g.
+> `apps/auth-sso/.../users.store.ts`, the maps in `CoursesService`/`CrmService`),
+> isolated behind repository-style classes so swapping in Prisma touches only
+> those files.
+
 ## Auth DB
 
 ```

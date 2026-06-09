@@ -1,7 +1,12 @@
 # Sofin — System Design
 
-Microservices platform on **Express + Node.js**.
+Microservices platform on **NestJS** (TypeScript).
 Self-built JWT auth · REST (sync) + RabbitMQ (async) · database-per-service.
+
+> The scaffold implements this as a NestJS monorepo (`apps/*` + `libs/common`).
+> For zero-infra dev it uses in-memory stores and an in-process EventBus (both
+> isolated for a Postgres/Prisma + RabbitMQ swap). See `01-architecture-overview.md`
+> for the per-concern implementation status.
 
 ## Documents
 1. [Architecture Overview](./01-architecture-overview.md) — context diagram, principles, service map, tech stack
@@ -16,6 +21,7 @@ Self-built JWT auth · REST (sync) + RabbitMQ (async) · database-per-service.
 ## TL;DR
 - **Gateway** is the only public entry; it verifies JWTs locally (RS256 public key) and routes to services.
 - **Auth/SSO** owns identity, issues short-lived access + rotating refresh tokens.
-- **LMS** and **CRM** are independent services, each with its own Postgres DB.
+- **LMS** and **CRM** are independent NestJS apps, each owning its data (Postgres per service in production).
+- RBAC is enforced with Nest guards + `@Permissions()` decorators; multi-role users get the **union** of permissions.
 - Services talk **REST** when an answer is needed now, **events** for decoupled side-effects.
-- Everything is stateless, containerized, and independently deployable.
+- Everything is stateless, independently deployable, and (in production) containerized.

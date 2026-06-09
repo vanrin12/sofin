@@ -1,8 +1,8 @@
 # API Contracts
 
 All client traffic goes through the Gateway at `https://api.sofin.example`.
-Gateway strips its prefix and forwards to the service. Every authenticated
-request carries `Authorization: Bearer <access_jwt>`.
+The Gateway forwards the full path intact (e.g. `/lms/courses` → LMS). Every
+authenticated request carries `Authorization: Bearer <access_jwt>`.
 
 ## Gateway routing table
 
@@ -34,7 +34,8 @@ Downstream services trust these headers (services are not publicly reachable).
 | POST | `/auth/refresh` | no | `{ refreshToken }` → new token pair (rotation) |
 | POST | `/auth/logout` | yes | revokes refresh token |
 | GET | `/auth/me` | yes | current user claims |
-| GET | `/auth/.well-known/jwks.json` | no | public keys for verification |
+| PUT | `/auth/users/:id/roles` | yes (`role:assign`) | set a user's roles |
+| GET | `/auth/public-key.pem` | no | RS256 public key for token verification (JWKS in prod) |
 | GET | `/auth/users/:id` | yes (internal) | user lookup for other services |
 
 ## LMS service

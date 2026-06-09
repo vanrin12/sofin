@@ -53,7 +53,7 @@ before Nest's router).
 npm install
 cp .env.example .env
 npm run infra:up     # Postgres (:5544) + RabbitMQ (:5672, UI :15672) via docker
-npm run db:push      # sync each Prisma schema → its database
+npm run db:migrate   # apply migrations to each service database
 npm run build        # prisma generate + nest build for each app + the lib
 npm run dev          # nest start --watch for all five (concurrently)
 ```
@@ -65,7 +65,12 @@ services fall back to an in-process EventBus for broker-less single-process dev.
 
 Run the whole stack (services + infra) in containers with
 `npm run stack:up` (`docker compose --profile apps up --build`); each service
-runs `prisma db push` on boot.
+runs `prisma migrate deploy` on boot.
+
+**Migrations.** Versioned per service under `apps/<name>/prisma/migrations/`
+(committed). Create + apply a new one during development with
+`npm run db:migrate:<svc>` (`prisma migrate dev`); apply pending migrations in
+CI/boot with `npm run db:migrate` (`prisma migrate deploy`).
 
 ## Production build & run
 
@@ -97,16 +102,15 @@ node dist/apps/auth-sso/src/main.js            # run a single service
 - **Managed Postgres** per service; **clustered RabbitMQ**; **Redis** for cache/rate-limit.
 
 ## From scaffold → production (remaining hardening)
-Persistence (Prisma/Postgres), the broker (RabbitMQ), `docker-compose`, and a
-per-app `Dockerfile` are **done**. What's left to be production-grade:
-1. **Migrations** — replace `prisma db push` with versioned `prisma migrate`
-   (migration history per service), run in CI before deploy.
-2. **Broker reliability** — add the **outbox** pattern (publish in the same tx as
+Persistence (Prisma/Postgres), versioned **migrations** (`prisma migrate`), the
+broker (RabbitMQ), `docker-compose`, and a per-app `Dockerfile` are **done**.
+What's left to be production-grade:
+1. **Broker reliability** — add the **outbox** pattern (publish in the same tx as
    the write) and per-consumer **dead-letter queues** with retry/backoff
    (`05-events.md`). The persistent/ack/nack plumbing is already in place.
-3. **Keys** — persist/rotate the Auth RSA keypair and expose a real **JWKS**
+2. **Keys** — persist/rotate the Auth RSA keypair and expose a real **JWKS**
    instead of `/auth/public-key.pem`.
-4. **Infra** — split into separate managed Postgres instances per service, a
+3. **Infra** — split into separate managed Postgres instances per service, a
    clustered RabbitMQ, add **Redis** (rate-limit/token revocation), and
    `infra/k8s/` manifests.
 

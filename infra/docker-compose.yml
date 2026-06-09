@@ -57,7 +57,7 @@ services:
     profiles: ["apps"]
     image: sofin-app:latest
     build: { context: .., dockerfile: infra/Dockerfile }
-    command: sh -c "npx prisma db push --schema apps/auth-sso/prisma/schema.prisma --skip-generate && node dist/apps/auth-sso/src/main.js"
+    command: sh -c "npx prisma migrate deploy --schema apps/auth-sso/prisma/schema.prisma && node dist/apps/auth-sso/src/main.js"
     environment:
       AUTH_DATABASE_URL: postgresql://sofin:sofin@postgres:5432/auth
       RABBITMQ_URL: amqp://sofin:sofin@rabbitmq:5672
@@ -69,7 +69,7 @@ services:
     profiles: ["apps"]
     image: sofin-app:latest
     build: { context: .., dockerfile: infra/Dockerfile }
-    command: sh -c "npx prisma db push --schema apps/lms/prisma/schema.prisma --skip-generate && node dist/apps/lms/src/main.js"
+    command: sh -c "npx prisma migrate deploy --schema apps/lms/prisma/schema.prisma && node dist/apps/lms/src/main.js"
     environment:
       LMS_DATABASE_URL: postgresql://sofin:sofin@postgres:5432/lms
       RABBITMQ_URL: amqp://sofin:sofin@rabbitmq:5672
@@ -81,7 +81,7 @@ services:
     profiles: ["apps"]
     image: sofin-app:latest
     build: { context: .., dockerfile: infra/Dockerfile }
-    command: sh -c "npx prisma db push --schema apps/crm/prisma/schema.prisma --skip-generate && node dist/apps/crm/src/main.js"
+    command: sh -c "npx prisma migrate deploy --schema apps/crm/prisma/schema.prisma && node dist/apps/crm/src/main.js"
     environment:
       CRM_DATABASE_URL: postgresql://sofin:sofin@postgres:5432/crm
       RABBITMQ_URL: amqp://sofin:sofin@rabbitmq:5672
@@ -93,7 +93,7 @@ services:
     profiles: ["apps"]
     image: sofin-app:latest
     build: { context: .., dockerfile: infra/Dockerfile }
-    command: sh -c "npx prisma db push --schema apps/notification/prisma/schema.prisma --skip-generate && node dist/apps/notification/src/main.js"
+    command: sh -c "npx prisma migrate deploy --schema apps/notification/prisma/schema.prisma && node dist/apps/notification/src/main.js"
     environment:
       NOTIF_DATABASE_URL: postgresql://sofin:sofin@postgres:5432/notification
       RABBITMQ_URL: amqp://sofin:sofin@rabbitmq:5672

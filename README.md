@@ -40,15 +40,20 @@ Both guards are wired globally per app via `APP_GUARD` (identity → permissions
 npm install
 cp .env.example .env
 npm run infra:up       # Postgres (:5544) + RabbitMQ (:5672, UI :15672) via docker
-npm run db:push        # create tables in each service database
+npm run db:migrate     # apply migrations to each service database
 npm run build          # prisma generate + compile all apps + lib
 npm run dev            # start auth, gateway, lms, crm, notification (watch mode)
 ```
 
 Persistence is **Postgres per service (Prisma)**; events flow over **RabbitMQ**.
 Run the whole stack in containers instead with `npm run stack:up` (builds images
-and runs `prisma db push` on boot). With `RABBITMQ_URL` unset the services fall
-back to an in-process EventBus (single-process dev without the broker).
+and runs `prisma migrate deploy` on boot). With `RABBITMQ_URL` unset the services
+fall back to an in-process EventBus (single-process dev without the broker).
+
+Schema changes use versioned migrations: edit a service's
+`prisma/schema.prisma`, then `npm run db:migrate:auth` (or `:lms`/`:crm`/`:notif`)
+to create + apply a new migration. `npm run db:migrate` applies pending
+migrations (CI/boot).
 
 ## Try it
 

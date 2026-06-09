@@ -3,6 +3,17 @@
 Async, fire-and-forget side-effects use a message broker so services stay
 decoupled. REST is used only when the caller needs an immediate answer.
 
+> **Implementation note.** `EventBus` (`libs/common/src/event-bus.ts`) is an
+> abstract `publish`/`subscribe` surface with two providers selected by
+> `CommonModule.forRoot(service)`: `RabbitEventBus` when `RABBITMQ_URL` is set
+> (durable topic exchange `sofin.events`, one durable queue per service per
+> subscription — e.g. `crm.enrollment.created`), else `InProcessEventBus` for
+> single-process dev. Producers (`bus.publish('enrollment.created', …)`) and
+> consumers (`bus.subscribe(…)` in `OnModuleInit`) depend only on the abstract
+> bus, so the transport is a provider swap — call sites are unchanged. Messages
+> are persistent and ack'd after the handler succeeds; a throwing handler nacks
+> (requeue=false → dead-letterable).
+
 ## Topology
 
 - **Exchange:** `sofin.events` (type `topic`).

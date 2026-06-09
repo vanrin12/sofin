@@ -1,60 +1,41 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { randomUUID } from 'crypto';
+import type { Notification } from '@sofin/prisma-notif';
 import { EventBus, EventEnvelope } from '@app/common';
+import { PrismaService } from '../prisma/prisma.service';
 
-export interface Notification {
-  id: string;
-  userId: string;
-  channel: string;
-  template: string;
-  payload: unknown;
-  status: string;
-  createdAt: string;
-}
+export type { Notification };
 
 @Injectable()
 export class NotificationsService implements OnModuleInit {
   private readonly logger = new Logger('NotificationsService');
-  private notifications: Notification[] = [];
-  private seen = new Set<string>(); // eventId dedupe — consumers are at-least-once
 
-  constructor(private readonly bus: EventBus) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly bus: EventBus,
+  ) {}
 
   onModuleInit() {
-    this.bus.subscribe('user.created', (env) =>
-      this.once(env, () => this.deliver(env.data.userId, 'email', 'welcome', env.data)),
-    );
-    this.bus.subscribe('enrollment.created', (env) =>
-      this.once(env, () => this.deliver(env.data.userId, 'email', 'welcome_course', env.data)),
-    );
-    this.bus.subscribe('deal.won', (env) =>
-      this.once(env, () => this.deliver(env.data.contactId, 'in_app', 'deal_won', env.data)),
-    );
+    this.bus.subscribe('user.created', (env) => this.deliver(env, env.data.userId, 'email', 'welcome'));
+    this.bus.subscribe('enrollment.created', (env) => this.deliver(env, env.data.userId, 'email', 'welcome_course'));
+    this.bus.subscribe('deal.won', (env) => this.deliver(env, env.data.contactId, 'in_app', 'deal_won'));
   }
 
-  private once(env: EventEnvelope, handler: () => void) {
-    if (this.seen.has(env.eventId)) return; // idempotent
-    this.seen.add(env.eventId);
-    handler();
+  // Idempotent on env.eventId via the unique constraint — safe under
+  // at-least-once delivery (a redelivered event is skipped, not duplicated).
+  private async deliver(env: EventEnvelope, userId: string, channel: string, template: string): Promise<void> {
+    try {
+      await this.prisma.notification.create({
+        data: { eventId: env.eventId, userId, channel, template, payload: env.data },
+      });
+      // Production: integrate an email/SMS/push provider here.
+      this.logger.log(`notification sent ${channel}/${template} -> ${userId}`);
+    } catch (e: any) {
+      if (e?.code === 'P2002') return; // duplicate eventId → already processed
+      throw e;
+    }
   }
 
-  private deliver(userId: string, channel: string, template: string, payload: unknown): Notification {
-    const n: Notification = {
-      id: randomUUID(),
-      userId,
-      channel,
-      template,
-      payload,
-      status: 'sent',
-      createdAt: new Date().toISOString(),
-    };
-    this.notifications.push(n);
-    // Production: integrate an email/SMS/push provider here.
-    this.logger.log(`notification sent ${channel}/${template} -> ${userId}`);
-    return n;
-  }
-
-  forUser(userId: string): Notification[] {
-    return this.notifications.filter((n) => n.userId === userId);
+  forUser(userId: string): Promise<Notification[]> {
+    return this.prisma.notification.findMany({ where: { userId } });
   }
 }

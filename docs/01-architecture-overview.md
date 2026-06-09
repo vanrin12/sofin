@@ -1,6 +1,14 @@
 # Sofin — Microservices Architecture Overview
 
-**Stack:** Express + Node.js · Self-built JWT auth · REST (sync) + Message Broker (async)
+**Stack:** NestJS (TypeScript) · Self-built JWT auth · REST (sync) + Message Broker (async)
+
+> **Implementation status (scaffold).** The repo implements this design as a
+> NestJS monorepo (`apps/*` + `libs/common`) with **Postgres per service (Prisma)**
+> and **RabbitMQ** (topic exchange), wired via `infra/docker-compose.yml`. With
+> `RABBITMQ_URL` unset, services fall back to an in-process EventBus for
+> single-process dev. Remaining gaps: Auth serves its public key at
+> **`/auth/public-key.pem`** rather than a rotating JWKS, and Redis/tracing are
+> not yet wired. Everything else below is implemented as described.
 
 ## 1. System context
 
@@ -47,25 +55,26 @@
 | Service | Owns | Key responsibilities |
 |---|---|---|
 | **API Gateway** | — | Routing, JWT validation, rate limiting, CORS, request logging/correlation ID |
-| **Auth / SSO** | users, roles, sessions, refresh_tokens | Login, JWT issue/refresh/revoke, RBAC, JWKS public key, user identity |
+| **Auth / SSO** | users, roles, sessions, refresh_tokens | Login, JWT issue/refresh/revoke, RBAC, public key (`/auth/public-key.pem`), user identity |
 | **LMS** | courses, lessons, enrollments, progress | Course catalog, enrollment, lesson progress, quizzes |
 | **CRM** | contacts, leads, deals, activities | Contact mgmt, sales pipeline, activity timeline |
 | **Notification** | notifications, templates | Email/SMS/push delivery driven by events |
 
 ## 4. Technology choices
 
-| Concern | Choice |
-|---|---|
-| Runtime / framework | Node.js 20+ · Express 4 |
-| Auth | `jsonwebtoken` (RS256), `bcrypt`, refresh-token rotation |
-| DB | PostgreSQL per service (ORM: Prisma) |
-| Cache | Redis (rate-limit counters, token revocation list, hot reads) |
-| Broker | RabbitMQ (`amqplib`) |
-| Validation | `zod` at every boundary |
-| Logging | `pino` structured JSON + correlation ID |
-| Tracing | OpenTelemetry |
-| Containerization | Docker per service, `docker-compose` for local |
-| Orchestration | Kubernetes / ECS in prod |
-| Repo layout | pnpm workspaces monorepo |
+| Concern | Choice | In scaffold |
+|---|---|---|
+| Runtime / framework | Node.js 20+ · NestJS 10 (TypeScript) | ✅ implemented |
+| Auth | `@nestjs/jwt` (RS256), `bcryptjs`, refresh-token rotation | ✅ implemented |
+| RBAC | Nest guards + `@Permissions()`/`@CurrentUser()` decorators | ✅ implemented |
+| Validation | `class-validator` DTOs + global `ValidationPipe` | ✅ implemented |
+| DB | PostgreSQL per service (ORM: Prisma) | ✅ implemented |
+| Broker | RabbitMQ topic exchange (`amqplib`) | ✅ implemented (in-proc fallback) |
+| Cache | Redis (rate-limit counters, token revocation list, hot reads) | ⏳ planned |
+| Logging | Nest `Logger` (structured) + correlation ID | ✅ Nest Logger |
+| Tracing | OpenTelemetry | ⏳ planned |
+| Containerization | Docker per app, `docker-compose` for local | ✅ compose + Dockerfile |
+| Orchestration | Kubernetes / ECS in prod | ⏳ planned |
+| Repo layout | NestJS monorepo (`apps/*` + `libs/common`) | ✅ implemented |
 
-See: `02-api-contracts.md`, `03-data-models.md`, `04-auth-flow.md`, `05-events.md`, `06-cross-cutting.md`, `07-repo-and-deploy.md`.
+See: `02-api-contracts.md`, `03-data-models.md`, `04-auth-flow.md`, `05-events.md`, `06-cross-cutting.md`, `07-repo-and-deploy.md`, `08-authorization-rbac.md`.

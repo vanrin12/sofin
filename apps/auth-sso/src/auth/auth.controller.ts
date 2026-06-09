@@ -43,22 +43,22 @@ export class AuthController {
 
   // ── Authenticated (identity injected by gateway) ─────────────────────────
   @Get('me')
-  me(@CurrentUser() current: AuthUser) {
-    const user = this.users.findById(current.id);
+  async me(@CurrentUser() current: AuthUser) {
+    const user = await this.users.findById(current.id);
     if (!user) throw new NotFoundException({ code: 'NOT_FOUND', message: 'user not found' });
     return { id: user.id, email: user.email, name: user.name, roles: user.roles };
   }
 
   @Post('logout')
-  logout(@CurrentUser() current: AuthUser) {
-    this.users.revokeAllForUser(current.id);
+  async logout(@CurrentUser() current: AuthUser) {
+    await this.users.revokeAllForUser(current.id);
     return { loggedOut: true };
   }
 
   // internal lookup used by other services
   @Get('users/:id')
-  getUser(@Param('id') id: string) {
-    const user = this.users.findById(id);
+  async getUser(@Param('id') id: string) {
+    const user = await this.users.findById(id);
     if (!user) throw new NotFoundException({ code: 'NOT_FOUND', message: 'user not found' });
     return { id: user.id, email: user.email, name: user.name, roles: user.roles };
   }
@@ -66,8 +66,8 @@ export class AuthController {
   // ── Role management (needs role:assign) ──────────────────────────────────
   @Permissions('role:assign')
   @Put('users/:id/roles')
-  setRoles(@Param('id') id: string, @Body() dto: RolesDto) {
-    const user = this.users.setRoles(id, dto.roles);
+  async setRoles(@Param('id') id: string, @Body() dto: RolesDto) {
+    const user = await this.users.setRoles(id, dto.roles);
     if (!user) throw new NotFoundException({ code: 'NOT_FOUND', message: 'user not found' });
     this.bus.publish('user.roles_changed', { userId: user.id, roles: user.roles }, { producer: 'auth' });
     return { id: user.id, roles: user.roles };

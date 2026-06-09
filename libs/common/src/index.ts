@@ -1,6 +1,7 @@
 export * from './common.module';
 export * from './bootstrap';
 export * from './event-bus';
+export * from './rabbit-event-bus';
 export * from './permissions';
 export * from './guards/identity.guard';
 export * from './guards/permissions.guard';

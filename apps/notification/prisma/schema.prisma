@@ -1,0 +1,22 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../node_modules/@sofin/prisma-notif"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("NOTIF_DATABASE_URL")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  eventId   String?  @unique // for idempotent consumers (dedupe at-least-once delivery)
+  userId    String
+  channel   String
+  template  String
+  payload   Json
+  status    String   @default("sent")
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}

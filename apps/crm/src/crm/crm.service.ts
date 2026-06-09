@@ -1,93 +1,57 @@
 import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
-import { randomUUID } from 'crypto';
+import type { Activity, Contact, Deal } from '@sofin/prisma-crm';
 import { AuthUser, EventBus } from '@app/common';
+import { PrismaService } from '../prisma/prisma.service';
 import { CreateContactDto, CreateDealDto, UpdateDealDto } from './dto';
 
-export interface Contact {
-  id: string;
-  name: string;
-  email?: string;
-  phone?: string;
-  ownerId: string;
-  createdAt: string;
-}
-export interface Deal {
-  id: string;
-  contactId: string;
-  title: string;
-  amount?: number;
-  stage: string;
-  ownerId: string;
-  createdAt: string;
-}
-export interface Activity {
-  id: string;
-  contactId: string;
-  type: string;
-  payload: unknown;
-  createdAt: string;
-}
+export type { Activity, Contact, Deal };
 
 @Injectable()
 export class CrmService implements OnModuleInit {
   private readonly logger = new Logger('CrmService');
-  private contacts = new Map<string, Contact>();
-  private deals = new Map<string, Deal>();
-  private activities: Activity[] = [];
 
-  constructor(private readonly bus: EventBus) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly bus: EventBus,
+  ) {}
 
   // ── Event consumers: react to other services ──────────────────────────────
   onModuleInit() {
     this.bus.subscribe('user.created', (env) => this.logger.log(`user.created ${env.data.userId}`));
-    this.bus.subscribe('enrollment.created', (env) => {
-      this.activities.push({
-        id: randomUUID(),
-        contactId: env.data.userId,
-        type: 'system_event',
-        payload: env.data,
-        createdAt: env.occurredAt,
+    this.bus.subscribe('enrollment.created', async (env) => {
+      await this.prisma.activity.create({
+        data: { contactId: env.data.userId, type: 'system_event', payload: env.data },
       });
       this.logger.log(`logged enrollment activity for ${env.data.userId}`);
     });
   }
 
-  listContacts(): Contact[] {
-    return [...this.contacts.values()];
+  listContacts(): Promise<Contact[]> {
+    return this.prisma.contact.findMany();
   }
 
-  createContact(dto: CreateContactDto, user: AuthUser): Contact {
-    const contact: Contact = { id: randomUUID(), ...dto, ownerId: user.id, createdAt: new Date().toISOString() };
-    this.contacts.set(contact.id, contact);
-    return contact;
+  createContact(dto: CreateContactDto, user: AuthUser): Promise<Contact> {
+    return this.prisma.contact.create({ data: { ...dto, ownerId: user.id } });
   }
 
-  activitiesFor(contactId: string): Activity[] {
-    return this.activities.filter((a) => a.contactId === contactId);
+  activitiesFor(contactId: string): Promise<Activity[]> {
+    return this.prisma.activity.findMany({ where: { contactId } });
   }
 
-  createDeal(dto: CreateDealDto, user: AuthUser): Deal {
-    const deal: Deal = {
-      id: randomUUID(),
-      contactId: dto.contactId,
-      title: dto.title,
-      amount: dto.amount,
-      stage: 'lead',
-      ownerId: user.id,
-      createdAt: new Date().toISOString(),
-    };
-    this.deals.set(deal.id, deal);
-    return deal;
+  createDeal(dto: CreateDealDto, user: AuthUser): Promise<Deal> {
+    return this.prisma.deal.create({
+      data: { contactId: dto.contactId, title: dto.title, amount: dto.amount, ownerId: user.id },
+    });
   }
 
-  updateDeal(id: string, dto: UpdateDealDto): Deal {
-    const deal = this.deals.get(id);
-    if (!deal) throw new NotFoundException({ code: 'NOT_FOUND', message: 'deal not found' });
-    const from = deal.stage;
-    if (dto.stage) deal.stage = dto.stage;
-    this.bus.publish('deal.stage_changed', { dealId: deal.id, contactId: deal.contactId, from, to: deal.stage }, { producer: 'crm' });
+  async updateDeal(id: string, dto: UpdateDealDto): Promise<Deal> {
+    const existing = await this.prisma.deal.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException({ code: 'NOT_FOUND', message: 'deal not found' });
+    const from = existing.stage;
+    const deal = await this.prisma.deal.update({ where: { id }, data: { stage: dto.stage ?? existing.stage } });
+    await this.bus.publish('deal.stage_changed', { dealId: deal.id, contactId: deal.contactId, from, to: deal.stage }, { producer: 'crm' });
     if (deal.stage === 'won')
-      this.bus.publish('deal.won', { dealId: deal.id, contactId: deal.contactId, amount: deal.amount }, { producer: 'crm' });
+      await this.bus.publish('deal.won', { dealId: deal.id, contactId: deal.contactId, amount: deal.amount }, { producer: 'crm' });
     return deal;
   }
 }

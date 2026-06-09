@@ -5,6 +5,16 @@ Cross-service references store only the **foreign UUID** (e.g. `user_id`) —
 never a FK to another DB. Denormalized copies (e.g. contact name) are kept
 in sync via events.
 
+> **Implementation note.** These shapes are implemented as **Prisma schemas**,
+> one per service (`apps/<name>/prisma/schema.prisma`), against a Postgres
+> database per service (`auth`, `lms`, `crm`, `notification` — created by
+> `infra/postgres/init.sql`). Each app has its own generated client
+> (`@sofin/prisma-<name>`) and a `PrismaService`. Versioned migrations live in
+> `apps/<name>/prisma/migrations/`; run `npm run db:migrate` to apply them.
+> A couple of scaffold simplifications vs. the diagrams below: Auth stores
+> `roles` as a `String[]` column (not `roles`/`role_permissions` join tables),
+> and lessons/templates tables aren't created yet.
+
 ## Auth DB
 
 ```

@@ -53,10 +53,14 @@ Convention: `*` = wildcard. `course:*` ⇒ all course actions. `*:*` ⇒ superad
    └─────────────────┬──────────────────┘
                      │  x-user-id, x-user-roles
    ┌─────────────────▼──────────────────┐
-   │  Service: fine-grained authz        │  does this user have `course:create`?
-   │  requirePermission('course:create') │  + ownership / resource-level checks
+   │  Service: fine-grained authz        │  IdentityGuard → req.user
+   │  @Permissions('course:create')      │  PermissionsGuard + ownership checks
    └────────────────────────────────────┘
 ```
+
+In NestJS this is two global guards per app (wired via `APP_GUARD`, in order):
+`IdentityGuard` populates `req.user` from the gateway's headers, then
+`PermissionsGuard` enforces the `@Permissions(...)` metadata on the handler.
 
 - **Gateway** does cheap, broad gating only (token valid; optionally block whole
   prefixes by role). It should **not** hold the full permission matrix.
@@ -73,64 +77,64 @@ definitions evolve without re-issuing tokens.
 { "sub": "uuid", "email": "...", "roles": ["instructor","learner"], "iat":..., "exp":... }
 ```
 
-## 5. Service-side enforcement (illustrative middleware)
+## 5. Service-side enforcement (NestJS)
 
-```js
-// packages/shared-auth/permissions.js
-// role → permissions table, seeded per service (synced from Auth via `role.updated` events)
-const ROLE_PERMS = {
+The role→permission table and matcher live in `libs/common/src/permissions.ts`
+(each service seeds/syncs this from Auth via `role.updated` events):
+
+```ts
+export const ROLE_PERMS: Record<string, string[]> = {
   admin:      ['*:*'],
   instructor: ['course:create','course:update','lesson:*','enrollment:read'],
   learner:    ['course:read','enrollment:create','progress:update','notification:read'],
   sales:      ['contact:*','deal:*','activity:*'],
 };
-
-function permissionsFor(roles) {
-  return new Set(roles.flatMap(r => ROLE_PERMS[r] ?? []));
-}
-
-function can(perms, needed) {
+export function permissionsFor(roles: string[] = []) { /* union over ROLE_PERMS */ }
+export function can(perms: Set<string>, needed: string) {
   const [res, act] = needed.split(':');
-  return perms.has('*:*') || perms.has(`${res}:*`) || perms.has(needed);
-}
-
-// express middleware
-function requirePermission(needed) {
-  return (req, res, next) => {
-    const roles = (req.headers['x-user-roles'] || '').split(',').filter(Boolean);
-    const perms = permissionsFor(roles);
-    if (!can(perms, needed)) {
-      return res.status(403).json({ error: { code: 'FORBIDDEN', message: `requires ${needed}` } });
-    }
-    next();
-  };
+  return perms.has('*:*') || perms.has(`${res}:*`) || perms.has(`*:${act}`) || perms.has(needed);
 }
 ```
 
-Usage in a route:
+`IdentityGuard` (global) reads the gateway headers and attaches `req.user`:
 
-```js
-router.post('/courses',           requirePermission('course:create'), createCourse);
-router.delete('/courses/:id',     requirePermission('course:delete'), deleteCourse);
-router.get('/courses',            requirePermission('course:read'),   listCourses);
+```ts
+const roles = String(req.headers['x-user-roles'] || '').split(',').filter(Boolean);
+req.user = { id: req.headers['x-user-id'], roles, permissions: permissionsFor(roles) };
+```
+
+`PermissionsGuard` (global) reads the `@Permissions()` metadata and enforces it
+(deny-by-default; a route with no metadata is gated only by IdentityGuard):
+
+```ts
+const required = reflector.getAllAndOverride<string[]>(PERMISSIONS_KEY, [handler, cls]);
+if (required?.length) {
+  const missing = required.find((p) => !can(req.user.permissions, p));
+  if (missing) throw new ForbiddenException({ code: 'FORBIDDEN', message: `requires ${missing}` });
+}
+```
+
+Usage on a controller — declarative, self-documenting:
+
+```ts
+@Permissions('course:read')   @Get('courses')               list() { … }
+@Permissions('course:create') @Post('courses')              create(@CurrentUser() user) { … }
+@Permissions('course:update') @Patch('courses/:id')         update(@Param('id') id, @CurrentUser() user) { … }
 ```
 
 ## 6. Resource-level / ownership checks (beyond roles)
 
 Role/permission says *"instructors can update courses"*. It does **not** say
 *"this instructor can update **this** course"*. That ownership check is
-business logic inside the service, after the permission gate:
+business logic inside the service, after the `@Permissions('course:update')` gate:
 
-```js
-async function updateCourse(req, res) {
-  const course = await repo.findById(req.params.id);
-  const isOwner = course.instructor_id === req.headers['x-user-id'];
-  const isAdmin = req.headers['x-user-roles'].includes('admin');
-  if (!isOwner && !isAdmin) {
-    return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'not your course' } });
-  }
-  // ...proceed
-}
+```ts
+// CoursesService.update(id, dto, user) — runs after PermissionsGuard
+const course = this.get(id);
+const isOwner = course.instructorId === user.id;
+const isAdmin = user.roles.includes('admin');
+if (!isOwner && !isAdmin)
+  throw new ForbiddenException({ code: 'FORBIDDEN', message: 'not your course' });
 ```
 
 Pattern: **permission gate (can this *kind* of user do it?) → ownership/scope
@@ -140,9 +144,8 @@ check (can *this* user do it to *this* resource?)**.
 
 | Endpoint | Permission | Action |
 |---|---|---|
-| `POST /auth/users/:id/roles` | `role:assign` | assign a role to a user |
-| `DELETE /auth/users/:id/roles/:role` | `role:assign` | remove a role |
-| `GET /auth/roles` | `user:manage` | list roles + permissions |
+| `PUT /auth/users/:id/roles` | `role:assign` | set a user's roles (implemented) |
+| `GET /auth/roles` | `user:manage` | list roles + permissions (planned) |
 
 - Auth stores `users`, `roles`, `user_roles`, `role_permissions`.
 - On any change, Auth emits `user.roles_changed` / `role.updated` so services
@@ -158,7 +161,6 @@ check (can *this* user do it to *this* resource?)**.
 - `admin` (`*:*`) is assignable only by an existing `admin` (`role:assign`).
 - Log every authz failure with `x-request-id`, user id, and the needed permission.
 - Validate role names against the catalogue on assignment (no free-text roles).
-```
 
 ## 9. Decision: why permissions, not just roles
 
@@ -166,5 +168,5 @@ Checking `if (role === 'admin')` scattered across services becomes unmaintainabl
 the moment requirements grow ("managers can also delete deals"). Centralizing on
 `resource:action` permissions means:
 - adding a capability to a role = one table edit, no code change;
-- a route's requirement is self-documenting (`requirePermission('deal:delete')`);
+- a route's requirement is self-documenting (`@Permissions('deal:delete')`);
 - multi-role users "just work" via permission union.

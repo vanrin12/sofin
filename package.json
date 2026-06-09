@@ -2,21 +2,42 @@
   "name": "sofin",
   "version": "0.1.0",
   "private": true,
-  "description": "Sofin microservices platform (Express + Node.js)",
-  "workspaces": [
-    "packages/*",
-    "services/*"
-  ],
+  "description": "Sofin microservices platform (NestJS)",
   "scripts": {
-    "dev": "concurrently -n auth,gateway,lms,crm,notif -c green,cyan,magenta,yellow,blue \"npm:dev:auth\" \"npm:dev:gateway\" \"npm:dev:lms\" \"npm:dev:crm\" \"npm:dev:notif\"",
-    "dev:gateway": "node --watch services/gateway/src/index.js",
-    "dev:auth": "node --watch services/auth-sso/src/index.js",
-    "dev:lms": "node --watch services/lms/src/index.js",
-    "dev:crm": "node --watch services/crm/src/index.js",
-    "dev:notif": "node --watch services/notification/src/index.js"
+    "build": "nest build gateway && nest build auth-sso && nest build lms && nest build crm && nest build notification",
+    "start:gateway": "nest start gateway --watch",
+    "start:auth": "nest start auth-sso --watch",
+    "start:lms": "nest start lms --watch",
+    "start:crm": "nest start crm --watch",
+    "start:notif": "nest start notification --watch",
+    "dev": "concurrently -n auth,gateway,lms,crm,notif -c green,cyan,magenta,yellow,blue \"npm:start:auth\" \"npm:start:gateway\" \"npm:start:lms\" \"npm:start:crm\" \"npm:start:notif\""
+  },
+  "dependencies": {
+    "@nestjs/common": "^10.4.4",
+    "@nestjs/config": "^3.2.3",
+    "@nestjs/core": "^10.4.4",
+    "@nestjs/jwt": "^10.2.0",
+    "@nestjs/platform-express": "^10.4.4",
+    "bcryptjs": "^2.4.3",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
+    "express-rate-limit": "^7.4.1",
+    "http-proxy-middleware": "^2.0.7",
+    "jsonwebtoken": "^9.0.2",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "@nestjs/cli": "^10.4.5",
+    "@nestjs/schematics": "^10.1.4",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^20.16.0",
+    "concurrently": "^9.1.0",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.6.2"
   },
   "engines": {
     "node": ">=20"

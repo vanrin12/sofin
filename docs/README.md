@@ -3,10 +3,10 @@
 Microservices platform on **NestJS** (TypeScript).
 Self-built JWT auth · REST (sync) + RabbitMQ (async) · database-per-service.
 
-> The scaffold implements this as a NestJS monorepo (`apps/*` + `libs/common`).
-> For zero-infra dev it uses in-memory stores and an in-process EventBus (both
-> isolated for a Postgres/Prisma + RabbitMQ swap). See `01-architecture-overview.md`
-> for the per-concern implementation status.
+> The scaffold implements this as a NestJS monorepo (`apps/*` + `libs/common`)
+> with Postgres per service (Prisma) and RabbitMQ, wired via
+> `infra/docker-compose.yml` (`RABBITMQ_URL` unset → in-process EventBus fallback).
+> See `01-architecture-overview.md` for the per-concern implementation status.
 
 ## Documents
 1. [Architecture Overview](./01-architecture-overview.md) — context diagram, principles, service map, tech stack

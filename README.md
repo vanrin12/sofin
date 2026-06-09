@@ -16,6 +16,8 @@ sofin/
 │   ├── crm/            # contacts/deals (RBAC-protected, event consumers)
 │   └── notification/   # event-driven notifications
 ├── libs/common/        # shared: guards, decorators, EventBus, filters, bootstrap
+├── infra/              # docker-compose (Postgres + RabbitMQ), Dockerfile
+├── apps/*/prisma/      # one Prisma schema per service (DB-per-service)
 ├── nest-cli.json       # monorepo projects
 └── tsconfig.json       # @app/common path mapping
 ```
@@ -32,17 +34,21 @@ sofin/
 
 Both guards are wired globally per app via `APP_GUARD` (identity → permissions).
 
-## Quickstart (no external services needed)
+## Quickstart
 
 ```bash
 npm install
 cp .env.example .env
-npm run build          # compile all apps + lib
+npm run infra:up       # Postgres (:5544) + RabbitMQ (:5672, UI :15672) via docker
+npm run db:push        # create tables in each service database
+npm run build          # prisma generate + compile all apps + lib
 npm run dev            # start auth, gateway, lms, crm, notification (watch mode)
 ```
 
-Runs out of the box with **in-memory stores** and an **in-process EventBus**.
-Swap for Postgres/Prisma + RabbitMQ for production (see `docs/07-repo-and-deploy.md`).
+Persistence is **Postgres per service (Prisma)**; events flow over **RabbitMQ**.
+Run the whole stack in containers instead with `npm run stack:up` (builds images
+and runs `prisma db push` on boot). With `RABBITMQ_URL` unset the services fall
+back to an in-process EventBus (single-process dev without the broker).
 
 ## Try it
 

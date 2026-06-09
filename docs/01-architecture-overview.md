@@ -3,12 +3,12 @@
 **Stack:** NestJS (TypeScript) · Self-built JWT auth · REST (sync) + Message Broker (async)
 
 > **Implementation status (scaffold).** The repo implements this design as a
-> NestJS monorepo (`apps/*` + `libs/common`). To run with zero infra, the
-> scaffold currently uses **in-memory stores** (instead of Postgres/Prisma) and
-> an **in-process EventBus** (instead of RabbitMQ), and Auth serves its public
-> key at **`/auth/public-key.pem`** (instead of a full JWKS). Both data and event
-> layers are isolated behind small interfaces for a drop-in swap. Everything else
-> below is implemented as described.
+> NestJS monorepo (`apps/*` + `libs/common`) with **Postgres per service (Prisma)**
+> and **RabbitMQ** (topic exchange), wired via `infra/docker-compose.yml`. With
+> `RABBITMQ_URL` unset, services fall back to an in-process EventBus for
+> single-process dev. Remaining gaps: Auth serves its public key at
+> **`/auth/public-key.pem`** rather than a rotating JWKS, and Redis/tracing are
+> not yet wired. Everything else below is implemented as described.
 
 ## 1. System context
 
@@ -68,12 +68,12 @@
 | Auth | `@nestjs/jwt` (RS256), `bcryptjs`, refresh-token rotation | ✅ implemented |
 | RBAC | Nest guards + `@Permissions()`/`@CurrentUser()` decorators | ✅ implemented |
 | Validation | `class-validator` DTOs + global `ValidationPipe` | ✅ implemented |
-| DB | PostgreSQL per service (ORM: Prisma) | ⏳ in-memory store |
-| Broker | RabbitMQ (`amqplib`) | ⏳ in-process EventBus |
+| DB | PostgreSQL per service (ORM: Prisma) | ✅ implemented |
+| Broker | RabbitMQ topic exchange (`amqplib`) | ✅ implemented (in-proc fallback) |
 | Cache | Redis (rate-limit counters, token revocation list, hot reads) | ⏳ planned |
 | Logging | Nest `Logger` (structured) + correlation ID | ✅ Nest Logger |
 | Tracing | OpenTelemetry | ⏳ planned |
-| Containerization | Docker per app, `docker-compose` for local | ⏳ planned |
+| Containerization | Docker per app, `docker-compose` for local | ✅ compose + Dockerfile |
 | Orchestration | Kubernetes / ECS in prod | ⏳ planned |
 | Repo layout | NestJS monorepo (`apps/*` + `libs/common`) | ✅ implemented |
 

@@ -42,23 +42,23 @@ export class AuthService implements OnApplicationBootstrap {
   }
 
   async login(email: string, password: string) {
-    const user = this.users.findByEmail(email);
+    const user = await this.users.findByEmail(email);
     if (!user || !(await this.users.verifyPassword(user, password)))
       throw new UnauthorizedException({ code: 'INVALID_CREDENTIALS', message: 'invalid email or password' });
     return {
       accessToken: this.signAccess(user),
-      refreshToken: this.users.issueRefreshToken(user.id, REFRESH_TTL),
+      refreshToken: await this.users.issueRefreshToken(user.id, REFRESH_TTL),
       user: { id: user.id, email: user.email, name: user.name, roles: user.roles },
     };
   }
 
-  refresh(refreshToken: string) {
-    const userId = this.users.consumeRefreshToken(refreshToken);
+  async refresh(refreshToken: string) {
+    const userId = await this.users.consumeRefreshToken(refreshToken);
     if (!userId) throw new UnauthorizedException({ code: 'INVALID_REFRESH', message: 'invalid or expired refresh token' });
-    const user = this.users.findById(userId) as User;
+    const user = (await this.users.findById(userId)) as User;
     return {
       accessToken: this.signAccess(user),
-      refreshToken: this.users.issueRefreshToken(user.id, REFRESH_TTL),
+      refreshToken: await this.users.issueRefreshToken(user.id, REFRESH_TTL),
     };
   }
 }

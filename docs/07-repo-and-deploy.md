@@ -52,16 +52,20 @@ before Nest's router).
 ```bash
 npm install
 cp .env.example .env
-npm run build        # nest build for each app + the lib
+npm run infra:up     # Postgres (:5544) + RabbitMQ (:5672, UI :15672) via docker
+npm run db:push      # sync each Prisma schema → its database
+npm run build        # prisma generate + nest build for each app + the lib
 npm run dev          # nest start --watch for all five (concurrently)
 ```
 
-Runs with **in-memory stores** and an **in-process EventBus** — no Postgres,
-RabbitMQ, or Redis needed to explore the flow. A default admin
-(`admin@sofin.dev` / `admin1234`) is seeded so role-gated endpoints are reachable.
+Persistence is **Postgres per service** (Prisma); events flow over **RabbitMQ**
+(`infra/docker-compose.yml`). A default admin (`admin@sofin.dev` / `admin1234`)
+is seeded so role-gated endpoints are reachable. With `RABBITMQ_URL` unset, the
+services fall back to an in-process EventBus for broker-less single-process dev.
 
-Production parity (`docker-compose`, not yet in the scaffold) adds: one Postgres
-per service, RabbitMQ (management UI), Redis.
+Run the whole stack (services + infra) in containers with
+`npm run stack:up` (`docker compose --profile apps up --build`); each service
+runs `prisma db push` on boot.
 
 ## Production build & run
 
@@ -92,17 +96,19 @@ node dist/apps/auth-sso/src/main.js            # run a single service
 - **CI/CD**: lint → test → `nest build` → migrate → deploy (per app, independently).
 - **Managed Postgres** per service; **clustered RabbitMQ**; **Redis** for cache/rate-limit.
 
-## From scaffold → production (the swaps)
-1. **Persistence** — replace each in-memory store (e.g. `UsersStore`,
-   `CoursesService`’s maps) with a Prisma repository per service (schemas in
-   `03-data-models.md`). The store classes already isolate this.
-2. **Broker** — replace the in-process `EventBus` in `libs/common` with an
-   `amqplib`-backed one exposing the same `publish`/`subscribe` surface; add the
-   outbox + DLQ from `05-events.md`. Call sites don't change.
-3. **Keys** — persist/rotate the Auth RSA keypair and expose a real JWKS instead
-   of `/auth/public-key.pem`.
-4. **Infra** — add `infra/docker-compose.yml` and `infra/k8s/` (Postgres ×N,
-   RabbitMQ, Redis), plus per-app `Dockerfile`s.
+## From scaffold → production (remaining hardening)
+Persistence (Prisma/Postgres), the broker (RabbitMQ), `docker-compose`, and a
+per-app `Dockerfile` are **done**. What's left to be production-grade:
+1. **Migrations** — replace `prisma db push` with versioned `prisma migrate`
+   (migration history per service), run in CI before deploy.
+2. **Broker reliability** — add the **outbox** pattern (publish in the same tx as
+   the write) and per-consumer **dead-letter queues** with retry/backoff
+   (`05-events.md`). The persistent/ack/nack plumbing is already in place.
+3. **Keys** — persist/rotate the Auth RSA keypair and expose a real **JWKS**
+   instead of `/auth/public-key.pem`.
+4. **Infra** — split into separate managed Postgres instances per service, a
+   clustered RabbitMQ, add **Redis** (rate-limit/token revocation), and
+   `infra/k8s/` manifests.
 
 ## Build order recommendation
 1. `libs/common` + Gateway skeleton

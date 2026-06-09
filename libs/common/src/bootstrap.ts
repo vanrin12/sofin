@@ -10,6 +10,7 @@ export async function bootstrapService(module: any, port: number, name: string):
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(new TransformInterceptor(app.get(Reflector)));
+  app.enableShutdownHooks(); // fire onModuleDestroy (close DB/broker connections)
   await app.listen(port);
   new Logger(name).log(`listening on ${port}`);
 }

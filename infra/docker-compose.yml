@@ -1,0 +1,105 @@
+# Local infrastructure for Sofin.
+#
+#   docker compose -f infra/docker-compose.yml up -d            # Postgres + RabbitMQ only
+#   docker compose -f infra/docker-compose.yml --profile apps up -d --build   # + all services
+#
+# Ports are chosen to avoid clashing with a Supabase stack (Postgres 5432 / Redis 6379).
+name: sofin
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sofin
+      POSTGRES_PASSWORD: sofin
+      POSTGRES_DB: sofin
+    ports:
+      - "5544:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sofin"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: sofin
+      RABBITMQ_DEFAULT_PASS: sofin
+    ports:
+      - "5672:5672"      # AMQP
+      - "15672:15672"    # management UI (http://localhost:15672 — sofin/sofin)
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Application services (opt-in via `--profile apps`) ──────────────────────
+  # All share one image built from the monorepo; each overrides the entrypoint.
+  gateway:
+    profiles: ["apps"]
+    image: sofin-app:latest
+    build: { context: .., dockerfile: infra/Dockerfile }
+    command: node dist/apps/gateway/src/main.js
+    environment:
+      AUTH_URL: http://auth-sso:4001
+      LMS_URL: http://lms:4002
+      CRM_URL: http://crm:4003
+      NOTIF_URL: http://notification:4004
+    ports: ["8080:8080"]
+    depends_on: [auth-sso, lms, crm, notification]
+
+  auth-sso:
+    profiles: ["apps"]
+    image: sofin-app:latest
+    build: { context: .., dockerfile: infra/Dockerfile }
+    command: sh -c "npx prisma db push --schema apps/auth-sso/prisma/schema.prisma --skip-generate && node dist/apps/auth-sso/src/main.js"
+    environment:
+      AUTH_DATABASE_URL: postgresql://sofin:sofin@postgres:5432/auth
+      RABBITMQ_URL: amqp://sofin:sofin@rabbitmq:5672
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  lms:
+    profiles: ["apps"]
+    image: sofin-app:latest
+    build: { context: .., dockerfile: infra/Dockerfile }
+    command: sh -c "npx prisma db push --schema apps/lms/prisma/schema.prisma --skip-generate && node dist/apps/lms/src/main.js"
+    environment:
+      LMS_DATABASE_URL: postgresql://sofin:sofin@postgres:5432/lms
+      RABBITMQ_URL: amqp://sofin:sofin@rabbitmq:5672
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  crm:
+    profiles: ["apps"]
+    image: sofin-app:latest
+    build: { context: .., dockerfile: infra/Dockerfile }
+    command: sh -c "npx prisma db push --schema apps/crm/prisma/schema.prisma --skip-generate && node dist/apps/crm/src/main.js"
+    environment:
+      CRM_DATABASE_URL: postgresql://sofin:sofin@postgres:5432/crm
+      RABBITMQ_URL: amqp://sofin:sofin@rabbitmq:5672
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  notification:
+    profiles: ["apps"]
+    image: sofin-app:latest
+    build: { context: .., dockerfile: infra/Dockerfile }
+    command: sh -c "npx prisma db push --schema apps/notification/prisma/schema.prisma --skip-generate && node dist/apps/notification/src/main.js"
+    environment:
+      NOTIF_DATABASE_URL: postgresql://sofin:sofin@postgres:5432/notification
+      RABBITMQ_URL: amqp://sofin:sofin@rabbitmq:5672
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+volumes:
+  pgdata:

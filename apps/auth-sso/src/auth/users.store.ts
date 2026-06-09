@@ -1,91 +1,75 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomBytes, randomUUID } from 'crypto';
+import type { User } from '@sofin/prisma-auth';
+import { PrismaService } from '../prisma/prisma.service';
 
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  passwordHash: string;
-  roles: string[];
-  status: 'active' | 'suspended';
-  createdAt: string;
-}
-
-interface RefreshRecord {
-  userId: string;
-  tokenHash: string;
-  expiresAt: number;
-  revoked: boolean;
-}
+export type { User };
 
 const sha256 = (v: string) => createHash('sha256').update(v).digest('hex');
 
-// In-memory store for the scaffold. Replace with Prisma + Postgres (schema in
-// docs/03-data-models.md); the method surface is repository-shaped so only this
-// file changes.
+// Prisma-backed user + refresh-token repository (schema: apps/auth-sso/prisma).
 @Injectable()
 export class UsersStore {
-  private users = new Map<string, User>();
-  private byEmail = new Map<string, string>();
-  private refresh = new Map<string, RefreshRecord>();
+  constructor(private readonly prisma: PrismaService) {}
 
   async createUser(input: { email: string; password: string; name: string; roles?: string[] }): Promise<User> {
     const email = input.email.toLowerCase();
-    if (this.byEmail.has(email)) throw new ConflictException({ code: 'EMAIL_TAKEN', message: 'email already registered' });
-    const user: User = {
-      id: randomUUID(),
-      email,
-      name: input.name,
-      passwordHash: await bcrypt.hash(input.password, 10),
-      roles: input.roles ?? ['learner'],
-      status: 'active',
-      createdAt: new Date().toISOString(),
-    };
-    this.users.set(user.id, user);
-    this.byEmail.set(email, user.id);
-    return user;
+    if (await this.prisma.user.findUnique({ where: { email } }))
+      throw new ConflictException({ code: 'EMAIL_TAKEN', message: 'email already registered' });
+    return this.prisma.user.create({
+      data: {
+        email,
+        name: input.name,
+        passwordHash: await bcrypt.hash(input.password, 10),
+        roles: input.roles ?? ['learner'],
+      },
+    });
   }
 
-  findByEmail(email: string): User | undefined {
-    return this.users.get(this.byEmail.get((email || '').toLowerCase()) as string);
+  findByEmail(email: string): Promise<User | null> {
+    return this.prisma.user.findUnique({ where: { email: (email || '').toLowerCase() } });
   }
 
-  findById(id: string): User | undefined {
-    return this.users.get(id);
+  findById(id: string): Promise<User | null> {
+    return this.prisma.user.findUnique({ where: { id } });
   }
 
   verifyPassword(user: User, password: string): Promise<boolean> {
     return bcrypt.compare(password, user.passwordHash);
   }
 
-  setRoles(id: string, roles: string[]): User | undefined {
-    const user = this.users.get(id);
-    if (user) user.roles = roles;
-    return user;
+  async setRoles(id: string, roles: string[]): Promise<User | null> {
+    try {
+      return await this.prisma.user.update({ where: { id }, data: { roles } });
+    } catch {
+      return null; // not found
+    }
   }
 
   // ── Refresh tokens (opaque, hashed at rest, single-use / rotated) ─────────
-  issueRefreshToken(userId: string, ttlSeconds: number): string {
+  async issueRefreshToken(userId: string, ttlSeconds: number): Promise<string> {
     const raw = randomBytes(48).toString('base64url');
     const id = randomUUID();
-    this.refresh.set(id, { userId, tokenHash: sha256(raw), expiresAt: Date.now() + ttlSeconds * 1000, revoked: false });
+    await this.prisma.refreshToken.create({
+      data: { id, userId, tokenHash: sha256(raw), expiresAt: new Date(Date.now() + ttlSeconds * 1000) },
+    });
     return `${id}.${raw}`;
   }
 
-  consumeRefreshToken(token: string): string | null {
+  async consumeRefreshToken(token: string): Promise<string | null> {
     const [id, raw] = (token || '').split('.');
-    const rec = this.refresh.get(id);
-    if (!rec || rec.revoked || rec.expiresAt < Date.now()) return null;
+    const rec = await this.prisma.refreshToken.findUnique({ where: { id } });
+    if (!rec || rec.revoked || rec.expiresAt.getTime() < Date.now()) return null;
     if (rec.tokenHash !== sha256(raw || '')) {
-      rec.revoked = true; // hash mismatch on a known id => possible theft
+      await this.prisma.refreshToken.update({ where: { id }, data: { revoked: true } }); // possible theft
       return null;
     }
-    rec.revoked = true; // rotation: single-use
+    await this.prisma.refreshToken.update({ where: { id }, data: { revoked: true } }); // rotation: single-use
     return rec.userId;
   }
 
-  revokeAllForUser(userId: string): void {
-    for (const rec of this.refresh.values()) if (rec.userId === userId) rec.revoked = true;
+  async revokeAllForUser(userId: string): Promise<void> {
+    await this.prisma.refreshToken.updateMany({ where: { userId }, data: { revoked: true } });
   }
 }

@@ -5,11 +5,14 @@ Cross-service references store only the **foreign UUID** (e.g. `user_id`) —
 never a FK to another DB. Denormalized copies (e.g. contact name) are kept
 in sync via events.
 
-> **Scaffold note.** These are the production schemas (Prisma + Postgres). The
-> scaffold currently holds the same shapes in **in-memory stores** (e.g.
-> `apps/auth-sso/.../users.store.ts`, the maps in `CoursesService`/`CrmService`),
-> isolated behind repository-style classes so swapping in Prisma touches only
-> those files.
+> **Implementation note.** These shapes are implemented as **Prisma schemas**,
+> one per service (`apps/<name>/prisma/schema.prisma`), against a Postgres
+> database per service (`auth`, `lms`, `crm`, `notification` — created by
+> `infra/postgres/init.sql`). Each app has its own generated client
+> (`@sofin/prisma-<name>`) and a `PrismaService`. Run `npm run db:push` to sync.
+> A couple of scaffold simplifications vs. the diagrams below: Auth stores
+> `roles` as a `String[]` column (not `roles`/`role_permissions` join tables),
+> and lessons/templates tables aren't created yet.
 
 ## Auth DB
 

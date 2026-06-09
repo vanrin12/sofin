@@ -3,10 +3,11 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { CommonModule, IdentityGuard, PermissionsGuard } from '@app/common';
 import { CrmModule } from './crm/crm.module';
+import { PrismaModule } from './prisma/prisma.module';
 import { HealthController } from './health.controller';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), CommonModule, CrmModule],
+  imports: [ConfigModule.forRoot({ isGlobal: true }), CommonModule.forRoot('crm'), PrismaModule, CrmModule],
   controllers: [HealthController],
   providers: [
     { provide: APP_GUARD, useClass: IdentityGuard },

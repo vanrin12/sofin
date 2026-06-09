@@ -11,21 +11,19 @@ export interface EventEnvelope<T = any> {
   data: T;
 }
 
-// Injectable event bus. The scaffold ships an in-PROCESS implementation so the
-// system runs without RabbitMQ. The publish/subscribe surface mirrors a topic
-// exchange, so a RabbitMQ-backed EventBus can be dropped in without touching
-// producers/consumers. NOTE: in `npm run dev` each service is its own process,
-// so cross-service events do not cross the boundary here — that is what RabbitMQ
-// provides in production. See docs/05-events.md.
-@Injectable()
-export class EventBus {
-  private readonly emitter = new EventEmitter();
-  constructor() {
-    this.emitter.setMaxListeners(0);
-  }
+export type EventHandler = (env: EventEnvelope) => void | Promise<void>;
 
-  publish<T>(type: string, data: T, opts: { producer?: string; correlationId?: string } = {}): EventEnvelope<T> {
-    const env: EventEnvelope<T> = {
+// Abstract event bus. Producers call publish(); consumers call subscribe() with
+// a routing-key pattern. Implementations: InProcessEventBus (dev, no infra) and
+// RabbitEventBus (topic exchange). Call sites depend only on this surface, so
+// switching transport is a provider swap — see CommonModule.forRoot().
+@Injectable()
+export abstract class EventBus {
+  abstract publish<T>(type: string, data: T, opts?: { producer?: string; correlationId?: string }): void | Promise<void>;
+  abstract subscribe(pattern: string, handler: EventHandler): void;
+
+  protected buildEnvelope<T>(type: string, data: T, opts: { producer?: string; correlationId?: string } = {}): EventEnvelope<T> {
+    return {
       eventId: randomUUID(),
       type,
       occurredAt: new Date().toISOString(),
@@ -33,20 +31,33 @@ export class EventBus {
       correlationId: opts.correlationId ?? randomUUID(),
       data,
     };
-    this.emitter.emit('event', env);
-    return env;
   }
 
-  // pattern: exact "deal.won", prefix "deal.*", or "*" for everything
-  subscribe(pattern: string, handler: (env: EventEnvelope) => void | Promise<void>): void {
-    this.emitter.on('event', (env: EventEnvelope) => {
-      if (this.matches(pattern, env.type)) Promise.resolve(handler(env)).catch(() => undefined);
-    });
-  }
-
-  private matches(pattern: string, type: string): boolean {
+  // pattern matching shared by implementations:
+  // "*" → all, "deal.*" → prefix, otherwise exact.
+  protected matches(pattern: string, type: string): boolean {
     if (pattern === '*') return true;
     if (pattern.endsWith('.*')) return type.startsWith(pattern.slice(0, -1));
     return pattern === type;
+  }
+}
+
+// ── In-process implementation (no broker; one process only) ──────────────────
+@Injectable()
+export class InProcessEventBus extends EventBus {
+  private readonly emitter = new EventEmitter();
+  constructor() {
+    super();
+    this.emitter.setMaxListeners(0);
+  }
+
+  publish<T>(type: string, data: T, opts: { producer?: string; correlationId?: string } = {}): void {
+    this.emitter.emit('event', this.buildEnvelope(type, data, opts));
+  }
+
+  subscribe(pattern: string, handler: EventHandler): void {
+    this.emitter.on('event', (env: EventEnvelope) => {
+      if (this.matches(pattern, env.type)) Promise.resolve(handler(env)).catch(() => undefined);
+    });
   }
 }

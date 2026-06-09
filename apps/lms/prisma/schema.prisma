@@ -1,0 +1,30 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../node_modules/@sofin/prisma-lms"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("LMS_DATABASE_URL")
+}
+
+model Course {
+  id           String       @id @default(uuid())
+  title        String
+  description  String?
+  instructorId String
+  status       String       @default("draft")
+  createdAt    DateTime     @default(now())
+  enrollments  Enrollment[]
+}
+
+model Enrollment {
+  id         String   @id @default(uuid())
+  courseId   String
+  course     Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  userId     String
+  enrolledAt DateTime @default(now())
+
+  @@unique([courseId, userId])
+  @@index([userId])
+}

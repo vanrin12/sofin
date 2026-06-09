@@ -1,0 +1,6 @@
+{
+  "name": "@sofin/shared-logger",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js"
+}

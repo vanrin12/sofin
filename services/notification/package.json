@@ -1,0 +1,12 @@
+{
+  "name": "@sofin/notification",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.js",
+  "dependencies": {
+    "@sofin/shared-auth": "*",
+    "@sofin/shared-events": "*",
+    "@sofin/shared-logger": "*",
+    "express": "^4.21.2"
+  }
+}

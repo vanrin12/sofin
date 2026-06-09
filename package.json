@@ -1,0 +1,24 @@
+{
+  "name": "sofin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sofin microservices platform (Express + Node.js)",
+  "workspaces": [
+    "packages/*",
+    "services/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n auth,gateway,lms,crm,notif -c green,cyan,magenta,yellow,blue \"npm:dev:auth\" \"npm:dev:gateway\" \"npm:dev:lms\" \"npm:dev:crm\" \"npm:dev:notif\"",
+    "dev:gateway": "node --watch services/gateway/src/index.js",
+    "dev:auth": "node --watch services/auth-sso/src/index.js",
+    "dev:lms": "node --watch services/lms/src/index.js",
+    "dev:crm": "node --watch services/crm/src/index.js",
+    "dev:notif": "node --watch services/notification/src/index.js"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -2,6 +2,7 @@ import { ConflictException, Injectable } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import type { User } from '@sofin/prisma-auth';
+import { OutboxEvent, outboxData } from '@app/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 export type { User };
@@ -13,17 +14,22 @@ const sha256 = (v: string) => createHash('sha256').update(v).digest('hex');
 export class UsersStore {
   constructor(private readonly prisma: PrismaService) {}
 
-  async createUser(input: { email: string; password: string; name: string; roles?: string[] }): Promise<User> {
+  // `emit` (optional) builds an event written to the outbox in the SAME
+  // transaction as the user insert — atomic create-and-enqueue.
+  async createUser(
+    input: { email: string; password: string; name: string; roles?: string[] },
+    emit?: (user: User) => OutboxEvent,
+  ): Promise<User> {
     const email = input.email.toLowerCase();
-    if (await this.prisma.user.findUnique({ where: { email } }))
-      throw new ConflictException({ code: 'EMAIL_TAKEN', message: 'email already registered' });
-    return this.prisma.user.create({
-      data: {
-        email,
-        name: input.name,
-        passwordHash: await bcrypt.hash(input.password, 10),
-        roles: input.roles ?? ['learner'],
-      },
+    const passwordHash = await bcrypt.hash(input.password, 10);
+    return this.prisma.$transaction(async (tx) => {
+      if (await tx.user.findUnique({ where: { email } }))
+        throw new ConflictException({ code: 'EMAIL_TAKEN', message: 'email already registered' });
+      const user = await tx.user.create({
+        data: { email, name: input.name, passwordHash, roles: input.roles ?? ['learner'] },
+      });
+      if (emit) await tx.outbox.create({ data: outboxData(emit(user)) });
+      return user;
     });
   }
 
@@ -39,9 +45,16 @@ export class UsersStore {
     return bcrypt.compare(password, user.passwordHash);
   }
 
+  // Update roles and enqueue user.roles_changed atomically (outbox in-tx).
   async setRoles(id: string, roles: string[]): Promise<User | null> {
     try {
-      return await this.prisma.user.update({ where: { id }, data: { roles } });
+      return await this.prisma.$transaction(async (tx) => {
+        const user = await tx.user.update({ where: { id }, data: { roles } });
+        await tx.outbox.create({
+          data: outboxData({ type: 'user.roles_changed', payload: { userId: user.id, roles: user.roles }, producer: 'auth' }),
+        });
+        return user;
+      });
     } catch {
       return null; // not found
     }

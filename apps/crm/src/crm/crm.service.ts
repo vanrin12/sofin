@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import type { Activity, Contact, Deal } from '@sofin/prisma-crm';
-import { AuthUser, EventBus } from '@app/common';
+import { AuthUser, EventBus, outboxData } from '@app/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateContactDto, CreateDealDto, UpdateDealDto } from './dto';
 
@@ -45,13 +45,28 @@ export class CrmService implements OnModuleInit {
   }
 
   async updateDeal(id: string, dto: UpdateDealDto): Promise<Deal> {
-    const existing = await this.prisma.deal.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException({ code: 'NOT_FOUND', message: 'deal not found' });
-    const from = existing.stage;
-    const deal = await this.prisma.deal.update({ where: { id }, data: { stage: dto.stage ?? existing.stage } });
-    await this.bus.publish('deal.stage_changed', { dealId: deal.id, contactId: deal.contactId, from, to: deal.stage }, { producer: 'crm' });
-    if (deal.stage === 'won')
-      await this.bus.publish('deal.won', { dealId: deal.id, contactId: deal.contactId, amount: deal.amount }, { producer: 'crm' });
-    return deal;
+    // deal update + outbox event(s) in one transaction
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.deal.findUnique({ where: { id } });
+      if (!existing) throw new NotFoundException({ code: 'NOT_FOUND', message: 'deal not found' });
+      const from = existing.stage;
+      const deal = await tx.deal.update({ where: { id }, data: { stage: dto.stage ?? existing.stage } });
+      await tx.outbox.create({
+        data: outboxData({
+          type: 'deal.stage_changed',
+          payload: { dealId: deal.id, contactId: deal.contactId, from, to: deal.stage },
+          producer: 'crm',
+        }),
+      });
+      if (deal.stage === 'won')
+        await tx.outbox.create({
+          data: outboxData({
+            type: 'deal.won',
+            payload: { dealId: deal.id, contactId: deal.contactId, amount: deal.amount },
+            producer: 'crm',
+          }),
+        });
+      return deal;
+    });
   }
 }

@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { OUTBOX_PRISMA, OutboxRelay } from '@app/common';
 import { privateKey, publicKey } from '../keys';
+import { PrismaService } from '../prisma/prisma.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { UsersStore } from './users.store';
@@ -19,6 +21,11 @@ import { UsersStore } from './users.store';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, UsersStore],
+  providers: [
+    AuthService,
+    UsersStore,
+    OutboxRelay,
+    { provide: OUTBOX_PRISMA, useExisting: PrismaService },
+  ],
 })
 export class AuthModule {}

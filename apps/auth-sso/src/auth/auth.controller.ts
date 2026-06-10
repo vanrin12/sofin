@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Header, NotFoundException, Param, Post, Put } from '@nestjs/common';
-import { CurrentUser, AuthUser, Permissions, Public, Raw, EventBus } from '@app/common';
+import { CurrentUser, AuthUser, Permissions, Public, Raw } from '@app/common';
 import { publicKey } from '../keys';
 import { AuthService } from './auth.service';
 import { UsersStore } from './users.store';
@@ -10,7 +10,6 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly users: UsersStore,
-    private readonly bus: EventBus,
   ) {}
 
   // ── Public: token verification key (gateway fetches this) ────────────────
@@ -67,9 +66,9 @@ export class AuthController {
   @Permissions('role:assign')
   @Put('users/:id/roles')
   async setRoles(@Param('id') id: string, @Body() dto: RolesDto) {
+    // setRoles updates roles and enqueues user.roles_changed in one transaction
     const user = await this.users.setRoles(id, dto.roles);
     if (!user) throw new NotFoundException({ code: 'NOT_FOUND', message: 'user not found' });
-    this.bus.publish('user.roles_changed', { userId: user.id, roles: user.roles }, { producer: 'auth' });
     return { id: user.id, roles: user.roles };
   }
 }

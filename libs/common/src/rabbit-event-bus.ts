@@ -1,6 +1,6 @@
 import { Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import * as amqp from 'amqplib';
-import { EventBus, EventHandler, EventEnvelope } from './event-bus';
+import { EventBus, EventHandler, EventEnvelope, PublishOpts } from './event-bus';
 
 // RabbitMQ-backed bus over a durable topic exchange. Each service (consumerGroup)
 // gets its OWN durable queue per subscription, so every service receives a copy
@@ -42,7 +42,7 @@ export class RabbitEventBus extends EventBus implements OnApplicationBootstrap, 
     }
   }
 
-  async publish<T>(type: string, data: T, opts: { producer?: string; correlationId?: string } = {}): Promise<void> {
+  async publish<T>(type: string, data: T, opts: PublishOpts = {}): Promise<void> {
     const env = this.buildEnvelope(type, data, opts);
     await this.ready;
     this.channel.publish(this.exchange, type, Buffer.from(JSON.stringify(env)), {
@@ -61,8 +61,21 @@ export class RabbitEventBus extends EventBus implements OnApplicationBootstrap, 
   private async bind(sub: { pattern: string; handler: EventHandler }): Promise<void> {
     const routingKey = this.toAmqpKey(sub.pattern);
     const queue = `${this.consumerGroup}.${sub.pattern}`;
-    await this.channel.assertQueue(queue, { durable: true });
+    const dlx = `${this.exchange}.dlx`;
+    const dlq = `${queue}.dlq`;
+
+    // Dead-letter topology: a failed message is nacked (no requeue) and routed
+    // by the broker to the DLX, which fans it into this queue's own .dlq for
+    // inspection/replay instead of being dropped.
+    await this.channel.assertExchange(dlx, 'topic', { durable: true });
+    await this.channel.assertQueue(queue, {
+      durable: true,
+      arguments: { 'x-dead-letter-exchange': dlx, 'x-dead-letter-routing-key': queue },
+    });
+    await this.channel.assertQueue(dlq, { durable: true });
+    await this.channel.bindQueue(dlq, dlx, queue);
     await this.channel.bindQueue(queue, this.exchange, routingKey);
+
     await this.channel.consume(queue, async (msg) => {
       if (!msg) return;
       try {
@@ -70,8 +83,8 @@ export class RabbitEventBus extends EventBus implements OnApplicationBootstrap, 
         await sub.handler(env);
         this.channel.ack(msg);
       } catch (e) {
-        this.logger.error(`handler failed for ${queue}: ${(e as Error).message}`);
-        this.channel.nack(msg, false, false); // don't requeue → dead-letter in prod
+        this.logger.error(`handler failed for ${queue} → ${dlq}: ${(e as Error).message}`);
+        this.channel.nack(msg, false, false); // requeue=false → dead-letter to .dlq
       }
     });
   }

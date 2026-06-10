@@ -1,6 +1,6 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Course, Enrollment } from '@sofin/prisma-lms';
-import { AuthUser, EventBus } from '@app/common';
+import { AuthUser, outboxData } from '@app/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCourseDto, UpdateCourseDto } from './dto';
 
@@ -8,10 +8,7 @@ export type { Course, Enrollment };
 
 @Injectable()
 export class CoursesService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly bus: EventBus,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   list(): Promise<Course[]> {
     return this.prisma.course.findMany();
@@ -41,17 +38,23 @@ export class CoursesService {
 
   async enroll(courseId: string, user: AuthUser, correlationId?: string): Promise<Enrollment> {
     const course = await this.get(courseId);
-    const existing = await this.prisma.enrollment.findUnique({
-      where: { courseId_userId: { courseId, userId: user.id } },
+    // enrollment insert + enrollment.created outbox row in one transaction
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.enrollment.findUnique({
+        where: { courseId_userId: { courseId, userId: user.id } },
+      });
+      if (existing) throw new ConflictException({ code: 'ALREADY_ENROLLED', message: 'already enrolled' });
+      const enrollment = await tx.enrollment.create({ data: { courseId, userId: user.id } });
+      await tx.outbox.create({
+        data: outboxData({
+          type: 'enrollment.created',
+          payload: { userId: user.id, courseId, courseTitle: course.title },
+          producer: 'lms',
+          correlationId,
+        }),
+      });
+      return enrollment;
     });
-    if (existing) throw new ConflictException({ code: 'ALREADY_ENROLLED', message: 'already enrolled' });
-    const enrollment = await this.prisma.enrollment.create({ data: { courseId, userId: user.id } });
-    await this.bus.publish(
-      'enrollment.created',
-      { userId: user.id, courseId, courseTitle: course.title },
-      { producer: 'lms', correlationId },
-    );
-    return enrollment;
   }
 
   myEnrollments(userId: string): Promise<Enrollment[]> {

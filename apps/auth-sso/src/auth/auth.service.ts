@@ -1,6 +1,5 @@
 import { Injectable, Logger, OnApplicationBootstrap, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { EventBus } from '@app/common';
 import { UsersStore, User } from './users.store';
 
 const REFRESH_TTL = Number(process.env.REFRESH_TOKEN_TTL || 604800);
@@ -12,7 +11,6 @@ export class AuthService implements OnApplicationBootstrap {
   constructor(
     private readonly users: UsersStore,
     private readonly jwt: JwtService,
-    private readonly bus: EventBus,
   ) {}
 
   // Seed a default admin so role-gated endpoints are reachable out of the box.
@@ -36,8 +34,12 @@ export class AuthService implements OnApplicationBootstrap {
   }
 
   async register(email: string, password: string, name: string) {
-    const user = await this.users.createUser({ email, password, name }); // defaults to ['learner']
-    this.bus.publish('user.created', { userId: user.id, email: user.email, name: user.name }, { producer: 'auth' });
+    // user insert + user.created outbox row in one transaction
+    const user = await this.users.createUser({ email, password, name }, (u) => ({
+      type: 'user.created',
+      payload: { userId: u.id, email: u.email, name: u.name },
+      producer: 'auth',
+    }));
     return { id: user.id, email: user.email, roles: user.roles };
   }
 

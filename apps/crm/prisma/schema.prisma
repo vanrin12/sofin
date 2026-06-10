@@ -38,3 +38,17 @@ model Activity {
 
   @@index([contactId])
 }
+
+// Transactional outbox: events written in the same tx as the business change,
+// published by OutboxRelay. The row id becomes the event id.
+model Outbox {
+  id            String    @id @default(uuid())
+  type          String
+  payload       Json
+  producer      String
+  correlationId String?
+  createdAt     DateTime  @default(now())
+  publishedAt   DateTime?
+
+  @@index([publishedAt])
+}

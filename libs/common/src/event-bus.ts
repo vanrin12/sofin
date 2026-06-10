@@ -17,14 +17,22 @@ export type EventHandler = (env: EventEnvelope) => void | Promise<void>;
 // a routing-key pattern. Implementations: InProcessEventBus (dev, no infra) and
 // RabbitEventBus (topic exchange). Call sites depend only on this surface, so
 // switching transport is a provider swap — see CommonModule.forRoot().
+export interface PublishOpts {
+  producer?: string;
+  correlationId?: string;
+  // Stable id for the event. The outbox relay passes the outbox row id so a
+  // redelivery carries the SAME eventId and idempotent consumers dedupe it.
+  eventId?: string;
+}
+
 @Injectable()
 export abstract class EventBus {
-  abstract publish<T>(type: string, data: T, opts?: { producer?: string; correlationId?: string }): void | Promise<void>;
+  abstract publish<T>(type: string, data: T, opts?: PublishOpts): void | Promise<void>;
   abstract subscribe(pattern: string, handler: EventHandler): void;
 
-  protected buildEnvelope<T>(type: string, data: T, opts: { producer?: string; correlationId?: string } = {}): EventEnvelope<T> {
+  protected buildEnvelope<T>(type: string, data: T, opts: PublishOpts = {}): EventEnvelope<T> {
     return {
-      eventId: randomUUID(),
+      eventId: opts.eventId ?? randomUUID(),
       type,
       occurredAt: new Date().toISOString(),
       producer: opts.producer ?? 'unknown',
@@ -51,7 +59,7 @@ export class InProcessEventBus extends EventBus {
     this.emitter.setMaxListeners(0);
   }
 
-  publish<T>(type: string, data: T, opts: { producer?: string; correlationId?: string } = {}): void {
+  publish<T>(type: string, data: T, opts: PublishOpts = {}): void {
     this.emitter.emit('event', this.buildEnvelope(type, data, opts));
   }
 

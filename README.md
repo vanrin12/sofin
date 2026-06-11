@@ -37,22 +37,28 @@ Both guards are wired globally per app via `APP_GUARD` (identity → permissions
 ## Quickstart
 
 ```bash
-npm install
+pnpm install
 cp .env.example .env
-npm run infra:up       # Postgres (:5544) + RabbitMQ (:5672, UI :15672) via docker
-npm run db:migrate     # apply migrations to each service database
-npm run build          # prisma generate + compile all apps + lib
-npm run dev            # start auth, gateway, lms, crm, notification (watch mode)
+pnpm infra:up       # Postgres (:5544) + RabbitMQ (:5672, UI :15672) via docker
+pnpm db:migrate     # apply migrations to each service database
+pnpm build          # prisma generate + compile all apps + lib
+pnpm dev            # start auth, gateway, lms, crm, notification (watch mode)
 ```
 
 Persistence is **Postgres per service (Prisma)**; events flow over **RabbitMQ**.
-Run the whole stack in containers instead with `npm run stack:up` (builds images
+Run the whole stack in containers instead with `pnpm stack:up` (builds images
 and runs `prisma migrate deploy` on boot). With `RABBITMQ_URL` unset the services
 fall back to an in-process EventBus (single-process dev without the broker).
 
+**API docs.** Each service serves Swagger UI at `/docs` (OpenAPI JSON at
+`/docs-json`) on its own port — e.g. auth at <http://localhost:4001/docs>, LMS
+`:4002`, CRM `:4003`, notification `:4004`. Services sit behind the gateway, so
+to call a protected route directly from Swagger set `x-user-id` / `x-user-roles`
+via **Authorize**. Disable docs with `SWAGGER_ENABLED=false` (set in production).
+
 Schema changes use versioned migrations: edit a service's
-`prisma/schema.prisma`, then `npm run db:migrate:auth` (or `:lms`/`:crm`/`:notif`)
-to create + apply a new migration. `npm run db:migrate` applies pending
+`prisma/schema.prisma`, then `pnpm db:migrate:auth` (or `:lms`/`:crm`/`:notif`)
+to create + apply a new migration. `pnpm db:migrate` applies pending
 migrations (CI/boot).
 
 ## Try it

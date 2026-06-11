@@ -50,12 +50,12 @@ before Nest's router).
 ## Local development
 
 ```bash
-npm install
+pnpm install
 cp .env.example .env
-npm run infra:up     # Postgres (:5544) + RabbitMQ (:5672, UI :15672) via docker
-npm run db:migrate   # apply migrations to each service database
-npm run build        # prisma generate + nest build for each app + the lib
-npm run dev          # nest start --watch for all five (concurrently)
+pnpm infra:up     # Postgres (:5544) + RabbitMQ (:5672, UI :15672) via docker
+pnpm db:migrate   # apply migrations to each service database
+pnpm build        # prisma generate + nest build for each app + the lib
+pnpm dev          # nest start --watch for all five (concurrently)
 ```
 
 Persistence is **Postgres per service** (Prisma); events flow over **RabbitMQ**
@@ -64,18 +64,18 @@ is seeded so role-gated endpoints are reachable. With `RABBITMQ_URL` unset, the
 services fall back to an in-process EventBus for broker-less single-process dev.
 
 Run the whole stack (services + infra) in containers with
-`npm run stack:up` (`docker compose --profile apps up --build`); each service
+`pnpm stack:up` (`docker compose --profile apps up --build`); each service
 runs `prisma migrate deploy` on boot.
 
 **Migrations.** Versioned per service under `apps/<name>/prisma/migrations/`
 (committed). Create + apply a new one during development with
-`npm run db:migrate:<svc>` (`prisma migrate dev`); apply pending migrations in
-CI/boot with `npm run db:migrate` (`prisma migrate deploy`).
+`pnpm db:migrate:<svc>` (`prisma migrate dev`); apply pending migrations in
+CI/boot with `pnpm db:migrate` (`prisma migrate deploy`).
 
 ## Production build & run
 
 ```bash
-npm run build                                  # → dist/apps/<name>/src/main.js
+pnpm build                                     # → dist/apps/<name>/src/main.js
 node dist/apps/auth-sso/src/main.js            # run a single service
 ```
 

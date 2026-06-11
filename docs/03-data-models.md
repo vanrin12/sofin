@@ -10,10 +10,11 @@ in sync via events.
 > database per service (`auth`, `lms`, `crm`, `notification` — created by
 > `infra/postgres/init.sql`). Each app has its own generated client
 > (`@sofin/prisma-<name>`) and a `PrismaService`. Versioned migrations live in
-> `apps/<name>/prisma/migrations/`; run `npm run db:migrate` to apply them.
+> `apps/<name>/prisma/migrations/`; run `pnpm db:migrate` to apply them.
 > A couple of scaffold simplifications vs. the diagrams below: Auth stores
 > `roles` as a `String[]` column (not `roles`/`role_permissions` join tables),
-> and lessons/templates tables aren't created yet.
+> and lessons/templates tables aren't created yet. Each **producing** service
+> (Auth, LMS, CRM) also owns an `outbox` table — see [Outbox table](#outbox-table-producing-services).
 
 ## Auth DB
 
@@ -130,6 +131,25 @@ templates
   key   text unique           -- welcome_email, deal_won ...
   body  text
 ```
+
+## Outbox table (producing services)
+
+Auth, LMS, and CRM each own an identical `outbox` table in their own DB. Events
+are written here in the same transaction as the business change and published by
+the `OutboxRelay` — see [05-events.md → Transactional outbox](05-events.md#transactional-outbox).
+
+```
+outbox
+  id             uuid PK         -- reused as the published event's eventId
+  type           text            -- routing key, e.g. enrollment.created
+  payload        jsonb
+  producer       text            -- auth | lms | crm
+  correlation_id text null
+  created_at     timestamptz
+  published_at   timestamptz null -- null = not yet published (relay picks it up)
+```
+
+`published_at` is indexed so the relay can scan unpublished rows cheaply.
 
 ## Handling shared data (no cross-DB joins)
 

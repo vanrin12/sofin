@@ -1,0 +1,10 @@
+# pnpm build-script approval.
+# onlyBuiltDependencies    = allow-list: pnpm runs these packages' install/build scripts.
+# ignoredBuiltDependencies = explicitly skipped (silences the "ignored build scripts" warning).
+onlyBuiltDependencies:
+  - '@prisma/client'
+  - '@prisma/engines'
+  - prisma
+ignoredBuiltDependencies:
+  - '@nestjs/core'
+  - '@scarf/scarf'

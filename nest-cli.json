@@ -6,7 +6,16 @@
   "root": "apps/gateway",
   "compilerOptions": {
     "webpack": false,
-    "tsConfigPath": "apps/gateway/tsconfig.app.json"
+    "tsConfigPath": "apps/gateway/tsconfig.app.json",
+    "plugins": [
+      {
+        "name": "@nestjs/swagger",
+        "options": {
+          "dtoFileNameSuffix": ["dto.ts", ".entity.ts"],
+          "introspectComments": true
+        }
+      }
+    ]
   },
   "projects": {
     "gateway":      { "type": "application", "root": "apps/gateway",      "entryFile": "main", "sourceRoot": "apps/gateway/src",      "compilerOptions": { "tsConfigPath": "apps/gateway/tsconfig.app.json" } },

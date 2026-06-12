@@ -5,5 +5,26 @@ dist/
 coverage/
 .DS_Store
 
+# nx
+.nx/cache
+.nx/workspace-data
+
 # local agent config
 .claude/
+
+# Next.js
+.next
+out
+
+# Secrets / local infra env
+.env.*
+!.env.example
+!.env.*.example
+infra/.env.prod
+
+# AWS CDK
+infra/cdk/cdk.out/
+infra/cdk/node_modules/
+infra/cdk/*.js
+infra/cdk/*.d.ts
+!infra/cdk/jest.config.js

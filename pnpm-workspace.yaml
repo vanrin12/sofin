@@ -1,10 +1,18 @@
-# pnpm build-script approval.
-# onlyBuiltDependencies    = allow-list: pnpm runs these packages' install/build scripts.
-# ignoredBuiltDependencies = explicitly skipped (silences the "ignored build scripts" warning).
-onlyBuiltDependencies:
-  - '@prisma/client'
-  - '@prisma/engines'
-  - prisma
-ignoredBuiltDependencies:
-  - '@nestjs/core'
-  - '@scarf/scarf'
+# pnpm build-script approval (pnpm v11 uses `allowBuilds: { pkg: true|false }`).
+# true  = run the package's install/build scripts; false = skip (no warning).
+allowBuilds:
+  # Prisma: needs its scripts to fetch/generate the query engine.
+  '@prisma/client': true
+  '@prisma/engines': true
+  prisma: true
+  # Nx + native helpers (daemon, file watcher, module resolver).
+  nx: true
+  '@parcel/watcher': true
+  unrs-resolver: true
+  # Not needed for backend services.
+  less: false
+  '@nestjs/core': false
+  '@scarf/scarf': false
+  # Next.js (image optimization) + SWC native binaries for the web apps.
+  sharp: true
+  '@swc/core': true

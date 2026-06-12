@@ -42,6 +42,11 @@ function setupSwagger(app: INestApplication, name: string, path: string): void {
     .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'bearer')
     .addApiKey({ type: 'apiKey', in: 'header', name: 'x-user-id' }, 'x-user-id')
     .addApiKey({ type: 'apiKey', in: 'header', name: 'x-user-roles' }, 'x-user-roles')
+    // Apply auth globally so Swagger UI's "Authorize" actually attaches credentials.
+    // Two alternatives (satisfy either): a gateway-issued JWT, OR — when calling a
+    // service directly — both gateway-injected identity headers.
+    .addSecurityRequirements('bearer')
+    .addSecurityRequirements({ 'x-user-id': [], 'x-user-roles': [] })
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup(path, app, document, {

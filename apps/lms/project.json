@@ -1,0 +1,21 @@
+{
+  "name": "lms",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/lms/src",
+  "tags": ["type:app", "scope:lms"],
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/apps/lms",
+        "webpackConfig": "apps/lms/webpack.config.js"
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "options": { "buildTarget": "lms:build", "inspect": false }
+    }
+  }
+}

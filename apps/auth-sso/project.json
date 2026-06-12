@@ -1,0 +1,21 @@
+{
+  "name": "auth-sso",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/auth-sso/src",
+  "tags": ["type:app", "scope:auth-sso"],
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/apps/auth-sso",
+        "webpackConfig": "apps/auth-sso/webpack.config.js"
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "options": { "buildTarget": "auth-sso:build", "inspect": false }
+    }
+  }
+}

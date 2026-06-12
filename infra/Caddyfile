@@ -1,0 +1,18 @@
+# Reverse proxy for the Sofin stack. Caddy obtains/renews TLS automatically for
+# real domains (Let's Encrypt); for *.localhost it uses its internal CA.
+# Hostnames come from the API_DOMAIN / APP_DOMAIN / ADMIN_DOMAIN env vars.
+
+{$API_DOMAIN} {
+	encode gzip
+	reverse_proxy gateway:8080
+}
+
+{$APP_DOMAIN} {
+	encode gzip
+	reverse_proxy web:3100
+}
+
+{$ADMIN_DOMAIN} {
+	encode gzip
+	reverse_proxy admin:3101
+}

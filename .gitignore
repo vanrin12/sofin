@@ -15,3 +15,16 @@ coverage/
 # Next.js
 .next
 out
+
+# Secrets / local infra env
+.env.*
+!.env.example
+!.env.*.example
+infra/.env.prod
+
+# AWS CDK
+infra/cdk/cdk.out/
+infra/cdk/node_modules/
+infra/cdk/*.js
+infra/cdk/*.d.ts
+!infra/cdk/jest.config.js

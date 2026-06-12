@@ -1,0 +1,160 @@
+# Production stack for a single EC2 host (lift-and-shift of the dev compose).
+#
+#   docker compose -f infra/docker-compose.prod.yml --env-file infra/.env.prod up -d --build
+#
+# Everything runs on one box: Postgres + RabbitMQ (self-hosted, persistent
+# volumes), the five NestJS services, both Next.js apps, and a Caddy reverse
+# proxy that terminates TLS and routes by hostname. Only Caddy (80/443) is
+# published; all other services talk over the private compose network.
+name: sofin
+
+# Shared definition for every app container: one image built from the monorepo,
+# each service just overrides `command`.
+x-app: &app
+  image: sofin-app:latest
+  build:
+    context: ..
+    dockerfile: infra/Dockerfile
+  restart: unless-stopped
+
+services:
+  # ── Data + broker (self-hosted, persistent) ────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sofin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.prod}
+      POSTGRES_DB: ${POSTGRES_USER:-sofin}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-sofin}']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-sofin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in .env.prod}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ── NestJS services (shared image, per-service command) ─────────────────────
+  gateway:
+    <<: *app
+    command: node dist/apps/gateway/main.js
+    environment:
+      GATEWAY_PORT: 8080
+      AUTH_URL: http://auth-sso:4001
+      LMS_URL: http://lms:4002
+      CRM_URL: http://crm:4003
+      NOTIF_URL: http://notification:4004
+      TOKEN_ISSUER: ${TOKEN_ISSUER:-sofin-auth}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
+    depends_on: [auth-sso, lms, crm, notification]
+
+  auth-sso:
+    <<: *app
+    command: sh -c "npx prisma migrate deploy --schema apps/auth-sso/prisma/schema.prisma && node dist/apps/auth-sso/main.js"
+    environment:
+      AUTH_PORT: 4001
+      AUTH_DATABASE_URL: postgresql://${POSTGRES_USER:-sofin}:${POSTGRES_PASSWORD}@postgres:5432/auth
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-sofin}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-sofin.events}
+      TOKEN_ISSUER: ${TOKEN_ISSUER:-sofin-auth}
+      ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-900}
+      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-604800}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  lms:
+    <<: *app
+    command: sh -c "npx prisma migrate deploy --schema apps/lms/prisma/schema.prisma && node dist/apps/lms/main.js"
+    environment:
+      LMS_PORT: 4002
+      LMS_DATABASE_URL: postgresql://${POSTGRES_USER:-sofin}:${POSTGRES_PASSWORD}@postgres:5432/lms
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-sofin}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-sofin.events}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  crm:
+    <<: *app
+    command: sh -c "npx prisma migrate deploy --schema apps/crm/prisma/schema.prisma && node dist/apps/crm/main.js"
+    environment:
+      CRM_PORT: 4003
+      CRM_DATABASE_URL: postgresql://${POSTGRES_USER:-sofin}:${POSTGRES_PASSWORD}@postgres:5432/crm
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-sofin}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-sofin.events}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  notification:
+    <<: *app
+    command: sh -c "npx prisma migrate deploy --schema apps/notification/prisma/schema.prisma && node dist/apps/notification/main.js"
+    environment:
+      NOTIF_PORT: 4004
+      NOTIF_DATABASE_URL: postgresql://${POSTGRES_USER:-sofin}:${POSTGRES_PASSWORD}@postgres:5432/notification
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-sofin}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-sofin.events}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  # ── Next.js apps (same image; production `next start`) ───────────────────────
+  web:
+    <<: *app
+    command: npx next start apps/web -p 3100 -H 0.0.0.0
+    environment:
+      NODE_ENV: production
+    depends_on: [gateway]
+
+  admin:
+    <<: *app
+    command: npx next start apps/admin -p 3101 -H 0.0.0.0
+    environment:
+      NODE_ENV: production
+    depends_on: [gateway]
+
+  # ── Reverse proxy: TLS + hostname routing (only public service) ─────────────
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      # Set real hostnames in .env.prod → Caddy gets Let's Encrypt TLS automatically.
+      # The *.localhost defaults serve locally over Caddy's internal CA (HTTP/HTTPS).
+      API_DOMAIN: ${API_DOMAIN:-api.localhost}
+      APP_DOMAIN: ${APP_DOMAIN:-app.localhost}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:-admin.localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [gateway, web, admin]
+
+volumes:
+  pgdata:
+  rabbitmq_data:
+  caddy_data:
+  caddy_config:

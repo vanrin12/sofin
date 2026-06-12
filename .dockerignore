@@ -1,8 +1,11 @@
-node_modules
-dist
+**/node_modules
+**/dist
+**/.next
 .nx
 .git
 .env
+.env.*
 *.log
 .DS_Store
 .claude
+infra/cdk/cdk.out

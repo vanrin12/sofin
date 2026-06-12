@@ -29,6 +29,11 @@
     },
     "lint": {
       "cache": true
+    },
+    "serve": {
+      "options": {
+        "runBuildTargetDependencies": true
+      }
     }
   },
   "plugins": [
@@ -38,5 +43,6 @@
         "targetName": "lint"
       }
     }
-  ]
+  ],
+  "analytics": true
 }

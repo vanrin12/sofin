@@ -42,25 +42,58 @@ pnpm install
 cp .env.example .env
 pnpm infra:up       # Postgres (:5544) + RabbitMQ (:5672, UI :15672) via docker
 pnpm db:migrate     # apply migrations to each service database
-pnpm build          # prisma generate + compile all apps + lib
-pnpm dev            # start auth, gateway, lms, crm, notification (watch mode)
+pnpm build          # prisma generate + nx run-many -t build (all apps, cached)
+pnpm dev            # nx run-many -t serve (auth, gateway, lms, crm, notification, watch)
 ```
+
+Nx (integrated monorepo): build/serve/lint one app with `nx build crm` ·
+`nx serve auth-sso` · `nx lint lms`; rebuild only what changed with
+`nx affected -t build`; view the project graph with `nx graph`.
 
 Persistence is **Postgres per service (Prisma)**; events flow over **RabbitMQ**.
 Run the whole stack in containers instead with `pnpm stack:up` (builds images
 and runs `prisma migrate deploy` on boot). With `RABBITMQ_URL` unset the services
 fall back to an in-process EventBus (single-process dev without the broker).
 
-**API docs.** Each service serves Swagger UI at `/docs` (OpenAPI JSON at
-`/docs-json`) on its own port — e.g. auth at <http://localhost:4001/docs>, LMS
-`:4002`, CRM `:4003`, notification `:4004`. Services sit behind the gateway, so
-to call a protected route directly from Swagger set `x-user-id` / `x-user-roles`
-via **Authorize**. Disable docs with `SWAGGER_ENABLED=false` (set in production).
-
 Schema changes use versioned migrations: edit a service's
 `prisma/schema.prisma`, then `pnpm db:migrate:auth` (or `:lms`/`:crm`/`:notif`)
 to create + apply a new migration. `pnpm db:migrate` applies pending
 migrations (CI/boot).
+
+> Hot reload watches each app's own sources, **not** the shared `libs/common` it
+> depends on — after editing shared code, restart `pnpm dev` to pick it up.
+
+## API docs (Swagger)
+
+With the stack running (`pnpm dev`), each service serves its own Swagger UI at
+`/docs` (OpenAPI JSON at `/docs-json`) on its own port:
+
+| Service | Swagger UI |
+|---|---|
+| auth-sso | <http://localhost:4001/docs> |
+| lms | <http://localhost:4002/docs> |
+| crm | <http://localhost:4003/docs> |
+| notification | <http://localhost:4004/docs> |
+
+The docs page itself is public; protected **endpoints** return `401` until you
+authorize. There are two auth paths — pick the one matching the URL you call:
+
+- **A service's own Swagger (`:4001`–`:4004`) calls that service directly**,
+  bypassing the gateway. Click **Authorize** and set the identity headers the
+  gateway would otherwise inject — leave `bearer` empty:
+  - `x-user-id` — any user id, e.g. `11111111-1111-1111-1111-111111111111`
+  - `x-user-roles` — a role, e.g. `admin`
+- **Through the gateway (`:8080`)** requests are JWT-verified, so authorize with a
+  **Bearer** token from `/auth/login`; any client-sent `x-user-*` headers are
+  stripped and ignored.
+
+Then **Try it out → Execute**: you'll get `200`/`201`, or `403` if the role lacks
+the required permission. Roles map to permissions in
+[`libs/common/src/permissions.ts`](libs/common/src/permissions.ts): `admin`
+(everything), `instructor`, `learner` (alias `user`), `sales`, `manager`.
+
+Disable docs with `SWAGGER_ENABLED=false` (set in production); change the route
+with `SWAGGER_PATH`.
 
 ## Try it
 

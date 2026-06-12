@@ -15,7 +15,7 @@
     },
     "serve": {
       "executor": "@nx/js:node",
-      "options": { "buildTarget": "lms:build" }
+      "options": { "buildTarget": "lms:build", "inspect": false }
     }
   }
 }

@@ -15,7 +15,7 @@
     },
     "serve": {
       "executor": "@nx/js:node",
-      "options": { "buildTarget": "notification:build" }
+      "options": { "buildTarget": "notification:build", "inspect": false }
     }
   }
 }

@@ -15,7 +15,7 @@
     },
     "serve": {
       "executor": "@nx/js:node",
-      "options": { "buildTarget": "auth-sso:build" }
+      "options": { "buildTarget": "auth-sso:build", "inspect": false }
     }
   }
 }

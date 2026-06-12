@@ -15,7 +15,7 @@
     },
     "serve": {
       "executor": "@nx/js:node",
-      "options": { "buildTarget": "crm:build" }
+      "options": { "buildTarget": "crm:build", "inspect": false }
     }
   }
 }

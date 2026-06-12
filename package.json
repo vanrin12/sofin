@@ -21,7 +21,7 @@
     "start:lms": "nx serve lms",
     "start:crm": "nx serve crm",
     "start:notif": "nx serve notification",
-    "dev": "nx run-many -t serve"
+    "dev": "nx run-many -t serve --parallel=5"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.4",

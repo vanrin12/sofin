@@ -1,9 +1,11 @@
 # Repository Layout & Deployment
 
-## NestJS monorepo
+## Nx monorepo (NestJS)
 
-A single NestJS monorepo (`nest-cli.json` projects) — apps build/deploy
-independently, shared code lives in one library.
+An Nx **integrated** monorepo — one root `package.json` (shared deps), one
+`project.json` per app/lib. Apps build/deploy independently via Nx executors
+(`@nx/webpack:webpack`); shared code lives in one library. Nx adds computation
+caching, `nx affected`, and `nx g @nx/nest:app` for new services.
 
 ```
 sofin/
@@ -25,8 +27,10 @@ sofin/
 │           ├── decorators/             # @Permissions, @CurrentUser, @Public, @Raw
 │           ├── interceptors/           # TransformInterceptor ({ data, meta })
 │           └── filters/                # HttpExceptionFilter ({ error })
-├── nest-cli.json                # monorepo project map
-├── tsconfig.json                # @app/common path mapping, rootDir
+├── apps/<svc>/project.json      # per-app Nx targets (build/serve/lint) + tags
+├── nx.json                      # task cache config + named inputs
+├── eslint.config.mjs            # flat config; @nx/enforce-module-boundaries
+├── tsconfig.base.json           # @app/common path mapping, shared compiler opts
 └── package.json                 # one dependency set for all apps
 ```
 
@@ -54,8 +58,8 @@ pnpm install
 cp .env.example .env
 pnpm infra:up     # Postgres (:5544) + RabbitMQ (:5672, UI :15672) via docker
 pnpm db:migrate   # apply migrations to each service database
-pnpm build        # prisma generate + nest build for each app + the lib
-pnpm dev          # nest start --watch for all five (concurrently)
+pnpm build        # prisma generate + nx run-many -t build (all apps, cached)
+pnpm dev          # nx run-many -t serve (watch all five)
 ```
 
 Persistence is **Postgres per service** (Prisma); events flow over **RabbitMQ**
@@ -75,8 +79,9 @@ CI/boot with `pnpm db:migrate` (`prisma migrate deploy`).
 ## Production build & run
 
 ```bash
-pnpm build                                     # → dist/apps/<name>/src/main.js
-node dist/apps/auth-sso/src/main.js            # run a single service
+pnpm build                                     # → dist/apps/<name>/main.js (webpack bundle)
+nx build auth-sso                              # build one service
+node dist/apps/auth-sso/main.js                # run a single service
 ```
 
 ```
@@ -95,10 +100,10 @@ node dist/apps/auth-sso/src/main.js            # run a single service
         RabbitMQ (clustered) · Redis
 ```
 
-- **Containerize** each app (`nest build <app>` → slim Node image); push to a registry.
+- **Containerize** each app (`nx build <app>` → slim Node image); push to a registry.
 - **Kubernetes** (or ECS): one Deployment + Service per app, HPA on CPU/RPS.
 - **Service discovery** via K8s DNS (`auth-sso.svc.cluster.local`).
-- **CI/CD**: lint → test → `nest build` → migrate → deploy (per app, independently).
+- **CI/CD**: `nx affected -t lint,build` → migrate → deploy (only changed apps).
 - **Managed Postgres** per service; **clustered RabbitMQ**; **Redis** for cache/rate-limit.
 
 ## From scaffold → production (remaining hardening)

@@ -18,8 +18,9 @@ sofin/
 ├── libs/common/        # shared: guards, decorators, EventBus, filters, bootstrap
 ├── infra/              # docker-compose (Postgres + RabbitMQ), Dockerfile
 ├── apps/*/prisma/      # one Prisma schema per service (DB-per-service)
-├── nest-cli.json       # monorepo projects
-└── tsconfig.json       # @app/common path mapping
+├── apps/*/project.json # per-app Nx targets (build/serve/lint) + tags
+├── nx.json             # Nx task cache + named inputs
+└── tsconfig.base.json  # @app/common path mapping
 ```
 
 ## RBAC primitives (`@app/common`)

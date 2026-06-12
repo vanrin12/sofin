@@ -11,16 +11,17 @@
     "db:migrate:lms": "prisma migrate dev --schema apps/lms/prisma/schema.prisma",
     "db:migrate:crm": "prisma migrate dev --schema apps/crm/prisma/schema.prisma",
     "db:migrate:notif": "prisma migrate dev --schema apps/notification/prisma/schema.prisma",
-    "build": "pnpm prisma:generate && nest build gateway && nest build auth-sso && nest build lms && nest build crm && nest build notification",
+    "build": "pnpm prisma:generate && nx run-many -t build",
+    "lint": "nx run-many -t lint",
     "infra:up": "docker compose -f infra/docker-compose.yml up -d",
     "infra:down": "docker compose -f infra/docker-compose.yml down",
     "stack:up": "docker compose -f infra/docker-compose.yml --profile apps up -d --build",
-    "start:gateway": "nest start gateway --watch",
-    "start:auth": "nest start auth-sso --watch",
-    "start:lms": "nest start lms --watch",
-    "start:crm": "nest start crm --watch",
-    "start:notif": "nest start notification --watch",
-    "dev": "concurrently -n auth,gateway,lms,crm,notif -c green,cyan,magenta,yellow,blue \"npm:start:auth\" \"npm:start:gateway\" \"npm:start:lms\" \"npm:start:crm\" \"npm:start:notif\""
+    "start:gateway": "nx serve gateway",
+    "start:auth": "nx serve auth-sso",
+    "start:lms": "nx serve lms",
+    "start:crm": "nx serve crm",
+    "start:notif": "nx serve notification",
+    "dev": "nx run-many -t serve"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.4",
@@ -43,16 +44,27 @@
   "devDependencies": {
     "@nestjs/cli": "^10.4.5",
     "@nestjs/schematics": "^10.1.4",
+    "@nx/eslint": "22.7.5",
+    "@nx/eslint-plugin": "22.7.5",
+    "@nx/js": "22.7.5",
+    "@nx/nest": "22.7.5",
+    "@nx/node": "22.7.5",
+    "@nx/webpack": "22.7.5",
     "@types/amqplib": "^0.10.5",
     "@types/bcryptjs": "^2.4.6",
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^20.16.0",
     "concurrently": "^9.1.0",
+    "eslint": "~8.57.0",
+    "jsonc-eslint-parser": "^2.4.2",
+    "nx": "^22.7.5",
     "prisma": "^5.22.0",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.6.2"
+    "typescript": "^5.6.2",
+    "typescript-eslint": "^8.61.0",
+    "webpack": "^5.97.1"
   },
   "engines": {
     "node": ">=20"

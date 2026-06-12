@@ -13,3 +13,6 @@ allowBuilds:
   less: false
   '@nestjs/core': false
   '@scarf/scarf': false
+  # Next.js (image optimization) + SWC native binaries for the web apps.
+  sharp: true
+  '@swc/core': true

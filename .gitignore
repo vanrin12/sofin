@@ -11,3 +11,7 @@ coverage/
 
 # local agent config
 .claude/
+
+# Next.js
+.next
+out

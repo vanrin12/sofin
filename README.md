@@ -5,7 +5,7 @@ multi-role RBAC via guards/decorators, REST + message-broker design.
 
 See [`docs/`](./docs/README.md) for the full system design.
 
-## Layout (NestJS monorepo)
+## Layout (Nx monorepo)
 
 ```
 sofin/
@@ -14,7 +14,9 @@ sofin/
 │   ├── auth-sso/       # login/register/refresh, RS256 JWT, roles
 │   ├── lms/            # courses/enrollments (RBAC-protected)
 │   ├── crm/            # contacts/deals (RBAC-protected, event consumers)
-│   └── notification/   # event-driven notifications
+│   ├── notification/   # event-driven notifications
+│   ├── web/            # user web app   — Next.js + Tailwind + shadcn/ui (:3100)
+│   └── admin/          # admin web app  — Next.js + Tailwind + shadcn/ui (:3101)
 ├── libs/common/        # shared: guards, decorators, EventBus, filters, bootstrap
 ├── infra/              # docker-compose (Postgres + RabbitMQ), Dockerfile
 ├── apps/*/prisma/      # one Prisma schema per service (DB-per-service)
@@ -43,7 +45,8 @@ cp .env.example .env
 pnpm infra:up       # Postgres (:5544) + RabbitMQ (:5672, UI :15672) via docker
 pnpm db:migrate     # apply migrations to each service database
 pnpm build          # prisma generate + nx run-many -t build (all apps, cached)
-pnpm dev            # nx run-many -t serve (auth, gateway, lms, crm, notification, watch)
+pnpm dev            # backend services (auth, gateway, lms, crm, notification, watch)
+pnpm dev:web        # web apps — user :3100 + admin :3101 (Next.js, watch)
 ```
 
 Nx (integrated monorepo): build/serve/lint one app with `nx build crm` ·
@@ -62,6 +65,23 @@ migrations (CI/boot).
 
 > Hot reload watches each app's own sources, **not** the shared `libs/common` it
 > depends on — after editing shared code, restart `pnpm dev` to pick it up.
+
+## Web apps
+
+Two **Next.js** apps (App Router) styled with **Tailwind CSS** + **shadcn/ui**.
+They call the backend through the gateway (`:8080`), so start the backend first.
+
+| App | Path | Dev URL | Run |
+|---|---|---|---|
+| User portal | `apps/web` | <http://localhost:3100> | `pnpm start:web` |
+| Admin console | `apps/admin` | <http://localhost:3101> | `pnpm start:admin` |
+
+`pnpm dev:web` runs both at once; build/lint a single app with `nx build web` ·
+`nx lint admin`. Add shadcn components with `npx shadcn@latest add <name>` from
+the app directory (each app has its own `components.json`, with `@/*` → `src/*`).
+
+> Ports are `3100`/`3101` (not the usual `3000`) to avoid clashing with other
+> local dev servers; change them in each app's `project.json` (`dev.options.port`).
 
 ## API docs (Swagger)
 
